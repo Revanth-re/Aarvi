@@ -16,7 +16,7 @@ import mongoose from "mongoose";
 // "aarvi@1206" should be encoded as "aarvi%401206" (you have this correct)
 // But make sure the entire string is properly formatted
 const URI = "mongodb+srv://aarvi:aarvi1206@aarvi-cluster.n3h9ppt.mongodb.net/aarvi?retryWrites=true&w=majority&appName=aarvi-cluster";
-// const URI="mongodb://localhost:27017/naad"
+// const URI="mongodb://localhost:27017/naadtgt"
 interface Cache { 
   conn: typeof mongoose | null; 
   promise: Promise<typeof mongoose> | null; 
