@@ -243,16 +243,22 @@ input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 
   flex-direction: column;
 }
 
-/* ─── Responsive: 768px ─── */
+/* ══════════════════════════════════════════════
+   RESPONSIVE — mobile first, scales up
+   ══════════════════════════════════════════════ */
+
+/* ─── Base mobile (≤ 768px) ─── */
 @media(max-width:768px) {
   .hide-mobile { display: none !important; }
+  .show-mobile-flex { display: flex !important; }
+
   .container { padding: 0 16px; }
-  .grid-cards { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .grid-cards    { grid-template-columns: repeat(2, 1fr); gap: 12px; }
   .grid-products { grid-template-columns: repeat(2, 1fr); gap: 12px; }
   .page-title { font-size: 24px !important; }
 
-  /* Scrollable filter strips */
-  .scroll-x { -ms-overflow-style: none; }
+  /* Scrollable filter strips — no scrollbar */
+  .scroll-x { -ms-overflow-style: none; scrollbar-width: none; }
   .scroll-x::-webkit-scrollbar { display: none; }
 
   /* Full player adjustments */
@@ -260,37 +266,90 @@ input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 
     padding-left: 20px !important;
     padding-right: 20px !important;
   }
+
+  /* ── Admin: give main content breathing room for topbar ── */
+  .admin-main { padding-top: 52px !important; }
+
+  /* ── Shop product detail: stack to single column ── */
+  .product-detail-grid {
+    grid-template-columns: 1fr !important;
+    gap: 24px !important;
+  }
+
+  /* ── Cart: tighten layout ── */
+  .cart-layout {
+    flex-direction: column !important;
+  }
+
+  /* ── Hero section: smaller text ── */
+  .hero-title { font-size: clamp(1.8rem, 7vw, 2.6rem) !important; }
+
+  /* ── Stat cards full width on very small ── */
+  .stat-grid { grid-template-columns: repeat(2, 1fr) !important; }
+
+  /* ── Tables: always horizontally scrollable ── */
+  .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tbl { min-width: 500px; }
 }
 
-/* ─── Responsive: 480px ─── */
+/* ─── Small phones (≤ 480px) ─── */
 @media(max-width:480px) {
   .container { padding: 0 12px; }
-  .grid-cards { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .grid-cards    { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .grid-products { grid-template-columns: repeat(2, 1fr); gap: 8px; }
 
-  /* Tighter filter pills */
-  .scroll-x button,
-  .scroll-x a {
+  /* Filter pills */
+  .scroll-x button, .scroll-x a {
     padding-top: 6px !important;
     padding-bottom: 6px !important;
     font-size: 12px !important;
   }
 
-  /* Mini player compact */
-  .container { gap: 8px; }
+  /* Admin form — single column grids */
+  .form-grid-2 { grid-template-columns: 1fr !important; }
+
+  /* Buttons stack on tiny screens */
+  .btn-row-mobile { flex-direction: column !important; }
+  .btn-row-mobile .btn { width: 100% !important; justify-content: center !important; }
+
+  /* Admin dashboard stat cards: 2 across */
+  .stat-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }
+
+  /* Quick action cards full width */
+  .quick-actions-grid { grid-template-columns: 1fr !important; }
 }
 
-/* ─── Responsive: 360px ─── */
+/* ─── Very small phones (≤ 360px) ─── */
 @media(max-width:360px) {
-  .container { padding: 0 8px; }
-  .grid-cards { gap: 6px; }
+  .container { padding: 0 10px; }
+  .grid-cards    { gap: 6px; }
   .grid-products { gap: 6px; }
 
-  /* Even smaller filter pills */
-  .scroll-x button,
-  .scroll-x a {
-    padding-left: 12px !important;
-    padding-right: 12px !important;
+  .scroll-x button, .scroll-x a {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
     font-size: 11px !important;
   }
+}
+
+/* ─── Tablet (769px – 1024px) ─── */
+@media(min-width:769px) and (max-width:1024px) {
+  .show-mobile-flex { display: none !important; }
+
+  .container { padding: 0 24px; }
+  .grid-cards    { grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .grid-products { grid-template-columns: repeat(3, 1fr); gap: 14px; }
+
+  /* Admin sidebar narrower on tablet */
+  .admin-sidebar { width: 200px !important; }
+
+  /* Product detail: maintain 2 col but tighter */
+  .product-detail-grid { gap: 28px !important; }
+}
+
+/* ─── Desktop (≥ 1025px) ─── */
+@media(min-width:1025px) {
+  .show-mobile-flex { display: none !important; }
+  .grid-cards    { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+  .grid-products { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
 }
