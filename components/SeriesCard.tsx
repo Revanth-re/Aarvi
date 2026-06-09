@@ -96,7 +96,7 @@
 //             {series.title}
 //           </h3>
 
-//           {!isSm && (
+//           {!isSm && (dfdv
 //             <p className="text-xs line-clamp-2 mb-3" style={{ color: "var(--color-text-muted)" }}>
 //               {series.description}
 //             </p>
