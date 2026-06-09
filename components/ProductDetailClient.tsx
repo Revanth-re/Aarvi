@@ -1,249 +1,211 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import {
+  ArrowLeft, Star, ShoppingCart, Zap, Check,
+  Truck, ShieldCheck, RefreshCw, Package,
+} from "lucide-react";
 import { Product } from "@/types";
 import { useCart } from "@/store";
-import { Star, ShoppingCart, ArrowLeft, Check, Package, ShieldCheck, Truck, Share2, Zap, Heart } from "lucide-react";
-import Link from "next/link";
+
+const SIZES = ["XS", "S", "M", "L", "XL", "2XL"];
 
 export default function ProductDetailClient() {
-  const params = useParams();
-  const id = params.id as string;
-  const router = useRouter();
+  const { id } = useParams() as { id: string };
+  const router  = useRouter();
+  const { add } = useCart();
+
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [activeImg, setActiveImg] = useState(0);
-  const [added, setAdded] = useState(false);
-  const [selectedSize, setSelectedSize] = useState("M");
-  const [isFavorite, setIsFavorite] = useState(false);
-  
-  const { add } = useCart();
+  const [size, setSize]         = useState("");
+  const [qty, setQty]           = useState(1);
+  const [addedCart, setAddedCart] = useState(false);
+  const [addedBuy, setAddedBuy]   = useState(false);
 
   useEffect(() => {
     if (!id) return;
-    setLoading(true);
     fetch(`/api/products/${id}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setProduct(data);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(d => { setProduct(d); setLoading(false); })
+      .catch(() => { setNotFound(true); setLoading(false); });
   }, [id]);
 
-  const handleAdd = () => {
+  const handleCart = () => {
     if (!product) return;
-    add(product, 1);
-    setAdded(true);
-    setTimeout(() => setAdded(false), 2000);
+    for (let i = 0; i < qty; i++) add(product);
+    setAddedCart(true);
+    setTimeout(() => setAddedCart(false), 2000);
   };
 
   const handleBuyNow = () => {
     if (!product) return;
-    add(product, 1);
-    router.push("/cart");
+    for (let i = 0; i < qty; i++) add(product);
+    setAddedBuy(true);
+    setTimeout(() => { setAddedBuy(false); router.push("/cart"); }, 600);
   };
 
-  const share = () => {
-    if (navigator.share) {
-      navigator.share({
-        title: product?.name,
-        text: product?.description,
-        url: window.location.href,
-      });
-    } else {
-      alert("Link copied to clipboard!");
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-          <div className="skeleton rounded-3xl aspect-square" />
-          <div className="space-y-6">
-            <div className="skeleton h-10 w-3/4" />
-            <div className="skeleton h-6 w-1/4" />
-            <div className="skeleton h-48 w-full" />
-            <div className="skeleton h-14 w-full" />
-          </div>
+  /* ── Loading ── */
+  if (loading) return (
+    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "40px 20px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48 }}>
+        <div className="skeleton" style={{ aspectRatio: "1", borderRadius: 16 }} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div className="skeleton" style={{ height: 36, width: "70%" }} />
+          <div className="skeleton" style={{ height: 20, width: "40%" }} />
+          <div className="skeleton" style={{ height: 28, width: "30%" }} />
+          <div className="skeleton" style={{ height: 120, borderRadius: 12 }} />
+          <div className="skeleton" style={{ height: 48, borderRadius: 10 }} />
         </div>
       </div>
-    );
-  }
+    </div>
+  );
 
-  if (!product) {
-    return (
-      <div className="text-center py-20 px-6">
-        <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-red-500">
-          <Package size={40} />
-        </div>
-        <h2 className="text-2xl font-bold mb-2">Product Not Found</h2>
-        <p className="text-muted mb-8">This item might have been removed or the link is broken.</p>
-        <Link href="/shop" className="btn btn-primary">
-          Return to Shop
-        </Link>
-      </div>
-    );
-  }
+  /* ── Not found ── */
+  if (notFound || !product) return (
+    <div style={{ maxWidth: 480, margin: "80px auto", padding: "0 20px", textAlign: "center" }}>
+      <Package size={40} color="var(--text3)" style={{ margin: "0 auto 16px" }} />
+      <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>Product not found</h2>
+      <p style={{ color: "var(--text3)", marginBottom: 24, fontSize: 14 }}>This product may have been removed or the link is incorrect.</p>
+      <Link href="/shop" className="btn btn-primary" style={{ textDecoration: "none" }}>
+        Back to Shop
+      </Link>
+    </div>
+  );
+
+  const p = product;
+  const hasDiscount = p.originalPrice && p.originalPrice > p.price;
+  const discountPct = hasDiscount ? Math.round((1 - p.price / p.originalPrice!) * 100) : 0;
+  const isClothing  = p.category === "clothing";
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 pb-24">
-      {/* Header Actions */}
-      <div className="flex items-center justify-between mb-8">
-        <button 
-          onClick={() => router.back()}
-          className="flex items-center gap-1.5 text-sm font-semibold transition-all hover:translate-x-[-4px]"
-          style={{ color: "var(--color-text-muted)", background: "none", border: "none", cursor: "pointer" }}
-        >
-          <ArrowLeft size={18} />
-          Back to Collection
-        </button>
-        <div className="flex gap-2">
-          <button 
-            onClick={share}
-            className="w-10 h-10 rounded-full flex items-center justify-center bg-surface border border-border text-muted hover:text-accent transition-colors"
-            title="Share"
-          >
-            <Share2 size={18} />
-          </button>
-          <button 
-            onClick={() => setIsFavorite(!isFavorite)}
-            className="w-10 h-10 rounded-full flex items-center justify-center bg-surface border border-border transition-colors"
-            style={{ color: isFavorite ? "#fb7185" : "var(--color-text-muted)" }}
-            title="Add to wishlist"
-          >
-            <Heart size={18} fill={isFavorite ? "currentColor" : "none"} />
-          </button>
-        </div>
-      </div>
+    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 20px 60px" }}>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16">
-        {/* Images Galley */}
-        <div className="space-y-6">
-          <div 
-            className="aspect-square rounded-[2rem] overflow-hidden group cursor-zoom-in" 
-            style={{ 
-              background: "var(--color-surface)", 
-              border: "1px solid var(--color-border)",
-              boxShadow: "0 30px 60px -20px rgba(0,0,0,0.3)"
-            }}
-          >
-            {product.images?.[activeImg] ? (
-              <img 
-                src={product.images[activeImg]} 
-                alt={product.name} 
-                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+      {/* Back */}
+      <button
+        onClick={() => router.back()}
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 13, marginBottom: 28, padding: 0, transition: "color .15s" }}
+        onMouseEnter={e => (e.currentTarget.style.color = "var(--text)")}
+        onMouseLeave={e => (e.currentTarget.style.color = "var(--text3)")}
+      >
+        <ArrowLeft size={14} /> Back
+      </button>
+
+      {/* Main grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 48, alignItems: "start" }}>
+
+        {/* ── Left: Images ── */}
+        <div>
+          {/* Main image */}
+          <div style={{ borderRadius: 16, overflow: "hidden", background: "var(--surface2)", border: "1px solid var(--border)", aspectRatio: "1 / 1", position: "relative", marginBottom: 12 }}>
+            {p.images?.[activeImg] ? (
+              <img
+                src={p.images[activeImg]}
+                alt={p.name}
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <ShoppingCart size={48} style={{ color: "var(--color-border)" }} />
+              <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Package size={48} color="var(--text3)" />
+              </div>
+            )}
+            {hasDiscount && (
+              <div style={{ position: "absolute", top: 14, right: 14, background: "var(--danger)", color: "#fff", borderRadius: 8, padding: "4px 10px", fontSize: 12, fontWeight: 700 }}>
+                -{discountPct}%
               </div>
             )}
           </div>
-          
-          {product.images && product.images.length > 1 && (
-            <div className="flex gap-4 overflow-x-auto pb-4 no-scroll">
-              {product.images.map((img, i) => (
+
+          {/* Thumbnails */}
+          {p.images && p.images.length > 1 && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {p.images.map((img, i) => (
                 <button
                   key={i}
                   onClick={() => setActiveImg(i)}
-                  className="w-24 h-24 rounded-2xl overflow-hidden flex-shrink-0 transition-all transform active:scale-90"
-                  style={{ 
-                    border: `3px solid ${activeImg === i ? "var(--color-accent)" : "transparent"}`,
-                    opacity: activeImg === i ? 1 : 0.5,
-                    background: "var(--color-surface)",
-                    boxShadow: activeImg === i ? "0 10px 20px rgba(0,0,0,0.1)" : "none"
+                  style={{
+                    width: 60, height: 60, borderRadius: 10, overflow: "hidden",
+                    border: `2px solid ${i === activeImg ? "var(--accent)" : "var(--border)"}`,
+                    padding: 0, cursor: "pointer", background: "var(--surface2)",
+                    transition: "border-color .15s", flexShrink: 0,
                   }}
                 >
-                  <img src={img} alt="" className="w-full h-full object-cover" />
+                  <img src={img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 </button>
               ))}
             </div>
           )}
         </div>
 
-        {/* Info */}
-        <div className="flex flex-col">
-          <div className="flex items-center gap-3 mb-4">
-             <span 
-              className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest"
-              style={{ background: "var(--color-accent)22", color: "var(--color-accent)", border: "1px solid var(--color-accent)44" }}
-            >
-              {product.category}
+        {/* ── Right: Info ── */}
+        <div>
+
+          {/* Category + badge */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <span className="badge badge-muted" style={{ textTransform: "capitalize" }}>{p.category}</span>
+            {p.isFeatured && <span className="badge badge-accent">Featured</span>}
+            {p.stock === 0 && <span className="badge badge-danger">Out of stock</span>}
+            {p.stock > 0 && p.stock <= 5 && <span className="badge badge-danger">Only {p.stock} left</span>}
+          </div>
+
+          {/* Name */}
+          <h1 style={{ fontSize: 26, fontWeight: 700, color: "var(--text)", marginBottom: 12, lineHeight: 1.2, letterSpacing: "-.02em" }}>
+            {p.name}
+          </h1>
+
+          {/* Rating */}
+          {p.rating > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+              <div style={{ display: "flex", gap: 2 }}>
+                {[1, 2, 3, 4, 5].map(n => (
+                  <Star key={n} size={14} color="#f59e0b" fill={n <= Math.round(p.rating) ? "#f59e0b" : "transparent"} />
+                ))}
+              </div>
+              <span style={{ fontSize: 13, color: "var(--text3)", fontFamily: "var(--ff-mono)" }}>
+                {p.rating.toFixed(1)}
+              </span>
+            </div>
+          )}
+
+          {/* Price */}
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 20 }}>
+            <span style={{ fontSize: 32, fontWeight: 800, color: "var(--text)", fontFamily: "var(--ff-mono)", letterSpacing: "-.03em" }}>
+              ₹{p.price.toLocaleString("en-IN")}
             </span>
-            {product.stock > 0 && (
-              <span className="flex items-center gap-1.5 text-[10px] font-bold text-green-500 uppercase tracking-widest">
-                <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                In Stock
+            {hasDiscount && (
+              <span style={{ fontSize: 16, color: "var(--text3)", fontFamily: "var(--ff-mono)", textDecoration: "line-through" }}>
+                ₹{p.originalPrice!.toLocaleString("en-IN")}
               </span>
             )}
           </div>
-          
-          <h1 
-            className="mb-4"
-            style={{ 
-              fontFamily: "var(--font-display)", 
-              fontSize: "clamp(2.5rem, 5vw, 4rem)", 
-              fontWeight: 800, 
-              color: "var(--color-text)", 
-              lineHeight: 1,
-              letterSpacing: "-0.02em"
-            }}
-          >
-            {product.name}
-          </h1>
 
-          <div className="flex items-center gap-6 mb-8">
-            <div className="flex items-center gap-1.5">
-              <div className="flex">
-                {[...Array(5)].map((_, i) => (
-                  <Star
-                    key={i}
-                    size={16}
-                    style={{ color: i < Math.round(product.rating) ? "#f59e0b" : "var(--color-border)" }}
-                    fill={i < Math.round(product.rating) ? "#f59e0b" : "none"}
-                  />
-                ))}
-              </div>
-              <span className="text-sm font-bold" style={{ color: "var(--color-text)" }}>{product.rating}</span>
-            </div>
-            <div className="w-1 h-1 rounded-full bg-border" />
-            <span className="text-sm font-medium" style={{ color: "var(--color-text-muted)" }}>{product.reviews} Reviews</span>
-          </div>
+          {/* Description */}
+          {p.description && (
+            <p style={{ fontSize: 14, color: "var(--text2)", lineHeight: 1.7, marginBottom: 24, borderTop: "1px solid var(--border)", paddingTop: 20 }}>
+              {p.description}
+            </p>
+          )}
 
-          <div className="mb-10 flex items-baseline gap-4">
-            <span 
-              style={{ 
-                fontSize: "3rem", 
-                fontWeight: 800, 
-                color: "var(--color-text)", 
-                fontFamily: "var(--font-mono)",
-                letterSpacing: "-0.04em"
-              }}
-            >
-              ₹{product.price.toLocaleString("en-IN")}
-            </span>
-            <span className="text-lg opacity-40 line-through" style={{ fontFamily: "var(--font-mono)" }}>
-              ₹{(product.price * 1.25).toLocaleString("en-IN")}
-            </span>
-          </div>
-
-          {/* Configuration */}
-          {product.category === "clothing" && (
-            <div className="mb-8">
-              <p className="text-xs font-bold uppercase tracking-widest mb-4 opacity-70">Select Size</p>
-              <div className="flex gap-3">
-                {["S", "M", "L", "XL", "2XL"].map((s) => (
+          {/* Size selector (clothing only) */}
+          {isClothing && (
+            <div style={{ marginBottom: 24 }}>
+              <p style={{ fontSize: 12, fontWeight: 600, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".6px", marginBottom: 10 }}>
+                Select size {size && <span style={{ color: "var(--accent)", textTransform: "none", letterSpacing: 0, fontWeight: 700 }}>— {size}</span>}
+              </p>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {SIZES.map(s => (
                   <button
                     key={s}
-                    onClick={() => setSelectedSize(s)}
-                    className="w-12 h-12 rounded-xl text-sm font-bold transition-all border-2"
+                    onClick={() => setSize(s === size ? "" : s)}
                     style={{
-                      background: selectedSize === s ? "var(--color-accent)" : "transparent",
-                      borderColor: selectedSize === s ? "var(--color-accent)" : "var(--color-border)",
-                      color: selectedSize === s ? "#fff" : "var(--color-text)"
+                      width: 44, height: 44, borderRadius: 10,
+                      border: `1.5px solid ${s === size ? "var(--accent)" : "var(--border2)"}`,
+                      background: s === size ? "var(--accent)15" : "transparent",
+                      color: s === size ? "var(--accent)" : "var(--text2)",
+                      fontSize: 13, fontWeight: s === size ? 700 : 500,
+                      cursor: "pointer", transition: "all .15s",
                     }}
                   >
                     {s}
@@ -253,77 +215,113 @@ export default function ProductDetailClient() {
             </div>
           )}
 
-          <div 
-            className="p-6 rounded-[1.5rem] mb-10" 
-            style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}
-          >
-            <p className="text-base" style={{ color: "var(--color-text2)", lineHeight: 1.8 }}>
-              {product.description}
+          {/* Quantity */}
+          <div style={{ marginBottom: 24 }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".6px", marginBottom: 10 }}>
+              Quantity
             </p>
+            <div style={{ display: "inline-flex", alignItems: "center", border: "1px solid var(--border2)", borderRadius: 10, overflow: "hidden" }}>
+              <button
+                onClick={() => setQty(q => Math.max(1, q - 1))}
+                style={{ width: 40, height: 40, border: "none", background: "none", cursor: "pointer", color: "var(--text2)", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center", transition: "background .15s" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "none")}
+              >
+                −
+              </button>
+              <span style={{ width: 44, textAlign: "center", fontSize: 15, fontWeight: 700, color: "var(--text)", fontFamily: "var(--ff-mono)" }}>
+                {qty}
+              </span>
+              <button
+                onClick={() => setQty(q => Math.min(p.stock || 99, q + 1))}
+                style={{ width: 40, height: 40, border: "none", background: "none", cursor: "pointer", color: "var(--text2)", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center", transition: "background .15s" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "none")}
+              >
+                +
+              </button>
+            </div>
           </div>
 
-          {/* Action buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 mb-12">
-             <button
-              onClick={handleBuyNow}
-              className="flex-1 py-5 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all hover:scale-[1.03] active:scale-[0.97]"
-              style={{ 
-                background: "var(--color-text)", 
-                color: "var(--color-bg)",
-                boxShadow: "0 20px 40px -10px rgba(0,0,0,0.5)"
-              }}
-            >
-              <Zap size={20} fill="currentColor" />
-              Buy Now
-            </button>
+          {/* CTA buttons */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 28 }}>
             <button
-              onClick={handleAdd}
-              className="flex-1 py-5 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all hover:scale-[1.03] active:scale-[0.97]"
-              style={{ 
-                background: added ? "#34d399" : "var(--color-accent)", 
-                color: "#fff",
-                boxShadow: `0 20px 40px -10px ${added ? "#34d39966" : "var(--color-accent)66"}`
+              onClick={handleBuyNow}
+              disabled={p.stock === 0}
+              style={{
+                width: "100%", padding: "14px", borderRadius: 11, border: "none",
+                background: addedBuy ? "var(--success)" : "var(--accent)",
+                color: "#fff", fontSize: 15, fontWeight: 700,
+                cursor: p.stock === 0 ? "not-allowed" : "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                opacity: p.stock === 0 ? .5 : 1,
+                transition: "background .2s",
               }}
             >
-              {added ? (
-                <><Check size={20} /> Packaged</>
-              ) : (
-                <><ShoppingCart size={20} /> Add to Cart</>
-              )}
+              {addedBuy ? <Check size={16} /> : <Zap size={16} />}
+              {addedBuy ? "Added! Going to cart…" : p.stock === 0 ? "Out of Stock" : "Buy Now"}
+            </button>
+
+            <button
+              onClick={handleCart}
+              disabled={p.stock === 0}
+              style={{
+                width: "100%", padding: "14px", borderRadius: 11,
+                border: "1.5px solid var(--border2)",
+                background: addedCart ? "var(--success)15" : "var(--surface2)",
+                color: addedCart ? "var(--success)" : "var(--text)",
+                fontSize: 15, fontWeight: 600,
+                cursor: p.stock === 0 ? "not-allowed" : "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                opacity: p.stock === 0 ? .5 : 1,
+                transition: "all .2s",
+              }}
+            >
+              {addedCart ? <Check size={16} /> : <ShoppingCart size={16} />}
+              {addedCart ? "Added to cart!" : "Add to Cart"}
             </button>
           </div>
 
-          {/* Perks Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 p-8 rounded-3xl" style={{ border: "1px solid var(--color-border)", background: "var(--color-surface-2)44" }}>
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-blue-500/10 text-blue-500 shrink-0">
-                <Truck size={22} />
+          {/* Trust badges */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {[
+              { icon: Truck,        title: "Express Shipping",   desc: "2–4 business days across India" },
+              { icon: ShieldCheck,  title: "Quality Guarantee",  desc: "100% authentic handcrafted products" },
+              { icon: RefreshCw,    title: "Easy Returns",       desc: "7-day hassle-free return policy" },
+              { icon: Package,      title: "Secure Packaging",   desc: "Safe delivery guaranteed" },
+            ].map(({ icon: Icon, title, desc }) => (
+              <div key={title} style={{ display: "flex", gap: 10, padding: "12px 14px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, alignItems: "flex-start" }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: "var(--accent)12", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Icon size={15} color="var(--accent)" />
+                </div>
+                <div>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: "var(--text)", margin: 0, marginBottom: 2 }}>{title}</p>
+                  <p style={{ fontSize: 11, color: "var(--text3)", margin: 0, lineHeight: 1.4 }}>{desc}</p>
+                </div>
               </div>
-              <div className="space-y-1">
-                <p className="text-sm font-bold" style={{ color: "var(--color-text)" }}>Express Shipping</p>
-                <p className="text-[11px] leading-relaxed" style={{ color: "var(--color-text-muted)" }}>Get it delivered in 2-4 business days across India.</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-green-500/10 text-green-500 shrink-0">
-                <ShieldCheck size={22} />
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-bold" style={{ color: "var(--color-text)" }}>Quality Gaurantee</p>
-                <p className="text-[11px] leading-relaxed" style={{ color: "var(--color-text-muted)" }}>100% authentic handcrafted products from local artisans.</p>
-              </div>
-            </div>
+            ))}
           </div>
 
-          {product.relatedSeries && (
-            <div className="mt-12 p-6 rounded-3xl border-2 border-dashed border-border text-center">
-              <p className="text-xs font-bold text-muted uppercase tracking-widest mb-3">Official Merchandise For</p>
-              <h4 className="text-xl font-bold" style={{ color: "var(--color-accent)" }}>{product.relatedSeries}</h4>
-              <p className="text-xs text-muted mt-2">Listen to the series while you wait for your order!</p>
+          {/* Tags */}
+          {p.tags && p.tags.length > 0 && (
+            <div style={{ marginTop: 20, display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {p.tags.map(t => (
+                <span key={t} style={{ fontSize: 11, color: "var(--text3)", background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 99, padding: "3px 10px" }}>
+                  #{t}
+                </span>
+              ))}
             </div>
           )}
+
         </div>
       </div>
+
+      {/* Responsive styles */}
+      <style>{`
+        @media (max-width: 680px) {
+          .product-grid { grid-template-columns: 1fr !important; gap: 24px !important; }
+        }
+      `}</style>
     </div>
   );
 }

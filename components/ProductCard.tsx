@@ -1,124 +1,146 @@
 "use client";
-
-import { Product } from "@/types";
-import { Star, ShoppingCart, Check, Eye } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
+import { ShoppingCart, Star, Check } from "lucide-react";
+import { Product } from "@/types";
 import { useCart } from "@/store";
-import { useRouter } from "next/navigation";
 
-export default function ProductCard({ product }: { product: Product }) {
-  const router = useRouter();
-  const [added, setAdded] = useState(false);
+export default function ProductCard({ product: p }: { product: Product }) {
   const { add } = useCart();
+  const [added, setAdded] = useState(false);
 
   const handleAdd = (e: React.MouseEvent) => {
     e.preventDefault();
-    e.stopPropagation(); // VERY IMPORTANT: Stop click from bubbling to the card
-    add(product, 1);
+    add(p);
     setAdded(true);
-    setTimeout(() => setAdded(false), 2000);
+    setTimeout(() => setAdded(false), 1800);
   };
 
-  const goToDetails = () => {
-    router.push(`/shop/${product._id}`);
-  };
+  const hasDiscount = p.originalPrice && p.originalPrice > p.price;
 
   return (
-    <div
-      onClick={goToDetails}
-      className="card-glow rounded-2xl overflow-hidden transition-all duration-300 group hover:translate-y-[-4px]"
-      style={{ 
-        background: "var(--color-surface)", 
-        border: "1px solid var(--color-border)", 
-        position: "relative",
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        cursor: "pointer"
-      }}
+    <Link
+      href={`/shop/${p._id}`}
+      style={{ textDecoration: "none", display: "block" }}
     >
-      {/* Image */}
-      <div className="h-48 overflow-hidden relative" style={{ background: "var(--color-surface-2)" }}>
-        {product.images?.[0] ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={product.images[0]}
-            alt={product.name}
-            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <ShoppingCart size={32} style={{ color: "var(--color-text-muted)" }} />
-          </div>
-        )}
-        
-        {/* Hover Overlay */}
-        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-          <span className="flex items-center gap-2 px-4 py-2 bg-white text-black rounded-full text-xs font-bold transform translate-y-4 group-hover:translate-y-0 transition-transform">
-            <Eye size={14} />
-            View Details
-          </span>
-        </div>
-
+      <div
+        className="card card-hover"
+        style={{ overflow: "hidden", cursor: "pointer" }}
+      >
+        {/* Image */}
         <div
-          className="absolute top-3 left-3 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
-          style={{ 
-            background: "rgba(0,0,0,0.6)", 
-            color: "#fff", 
-            backdropFilter: "blur(4px)",
-            border: "1px solid rgba(255,255,255,0.1)" 
+          style={{
+            aspectRatio: "1 / 1",
+            background: "var(--surface2)",
+            overflow: "hidden",
+            position: "relative",
           }}
         >
-          {product.category}
-        </div>
-      </div>
-
-      {/* Info */}
-      <div className="p-4 flex-1 flex flex-col">
-        <h3 className="font-semibold text-sm leading-tight mb-2 group-hover:text-[var(--color-accent)] transition-colors" style={{ color: "var(--color-text)" }}>
-          {product.name}
-        </h3>
-        
-        {/* Rating */}
-        <div className="flex items-center gap-1 mb-3">
-          {[...Array(5)].map((_, i) => (
-            <Star
-              key={i}
-              size={10}
-              style={{ color: i < Math.round(product.rating) ? "#f59e0b" : "var(--color-border)" }}
-              fill={i < Math.round(product.rating) ? "#f59e0b" : "none"}
+          {p.images?.[0] ? (
+            <img
+              src={p.images[0]}
+              alt={p.name}
+              style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform .3s" }}
+              onMouseEnter={e => (e.currentTarget.style.transform = "scale(1.04)")}
+              onMouseLeave={e => (e.currentTarget.style.transform = "scale(1)")}
             />
-          ))}
-          <span className="text-[10px] ml-1" style={{ color: "var(--color-text-muted)" }}>({product.reviews})</span>
-        </div>
+          ) : (
+            <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <ShoppingCart size={28} color="var(--text3)" />
+            </div>
+          )}
 
-        <div className="mt-auto flex items-center justify-between gap-2">
+          {/* Category badge */}
           <span
-            className="text-base font-bold"
-            style={{ color: "var(--color-text)", fontFamily: "var(--font-mono)" }}
+            className="badge badge-muted"
+            style={{ position: "absolute", top: 10, left: 10, textTransform: "capitalize", fontSize: 10, backdropFilter: "blur(6px)", background: "var(--bg)cc" }}
           >
-            ₹{product.price.toLocaleString("en-IN")}
+            {p.category}
           </span>
 
-          <button
-            onClick={handleAdd}
-            disabled={added}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold transition-all hover:scale-110 active:scale-95"
+          {/* Discount badge */}
+          {hasDiscount && (
+            <span
+              className="badge badge-danger"
+              style={{ position: "absolute", top: 10, right: 10, fontSize: 10 }}
+            >
+              Sale
+            </span>
+          )}
+        </div>
+
+        {/* Info */}
+        <div style={{ padding: "14px 14px 12px" }}>
+          <h3
             style={{
-              background: added ? "#34d39915" : "var(--color-accent)",
-              color: added ? "#34d399" : "#fff",
-              border: added ? "1px solid #34d39988" : "none",
-              cursor: "pointer",
-              boxShadow: added ? "none" : "0 4px 12px var(--color-accent)44",
-              position: "relative",
-              zIndex: 10
+              fontSize: 13, fontWeight: 600, color: "var(--text)",
+              marginBottom: 6, lineHeight: 1.35,
+              overflow: "hidden", display: "-webkit-box",
+              WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
             }}
           >
-            {added ? <Check size={14}/> : <ShoppingCart size={14}/>}
-            {added ? "Added" : "Add"}
-          </button>
+            {p.name}
+          </h3>
+
+          {/* Rating */}
+          {p.rating > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
+              <div style={{ display: "flex", gap: 1 }}>
+                {[1, 2, 3, 4, 5].map(n => (
+                  <Star
+                    key={n}
+                    size={10}
+                    color="#f59e0b"
+                    fill={n <= Math.round(p.rating) ? "#f59e0b" : "transparent"}
+                  />
+                ))}
+              </div>
+              <span style={{ fontSize: 11, color: "var(--text3)", fontFamily: "var(--ff-mono)" }}>
+                {p.rating.toFixed(1)}
+              </span>
+            </div>
+          )}
+
+          {/* Price row */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", fontFamily: "var(--ff-mono)" }}>
+                ₹{p.price.toLocaleString("en-IN")}
+              </span>
+              {hasDiscount && (
+                <span style={{ fontSize: 11, color: "var(--text3)", fontFamily: "var(--ff-mono)", textDecoration: "line-through" }}>
+                  ₹{p.originalPrice!.toLocaleString("en-IN")}
+                </span>
+              )}
+            </div>
+
+            <button
+              onClick={handleAdd}
+              style={{
+                width: 32, height: 32, borderRadius: 8, border: "none",
+                background: added ? "var(--success)" : "var(--accent)",
+                color: "#fff", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0, transition: "background .2s",
+              }}
+            >
+              {added ? <Check size={13} /> : <ShoppingCart size={13} />}
+            </button>
+          </div>
+
+          {/* Low stock warning */}
+          {p.stock > 0 && p.stock <= 5 && (
+            <p style={{ fontSize: 10, color: "var(--danger)", marginTop: 6 }}>
+              Only {p.stock} left
+            </p>
+          )}
+          {p.stock === 0 && (
+            <p style={{ fontSize: 10, color: "var(--text3)", marginTop: 6 }}>
+              Out of stock
+            </p>
+          )}
         </div>
       </div>
-    </div>
+    </Link>
   );
 }
