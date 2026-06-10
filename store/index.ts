@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { Episode, Series, Product, Theme, CartItem } from "@/types";
+import { Episode, Series, Product, Theme, CartItem, User } from "@/types";
 
 interface PlayerStore {
   ep: Episode|null; series: Series|null; playing: boolean;
@@ -11,23 +11,15 @@ interface PlayerStore {
   next:()=>void; prev:()=>void;
 }
 export const usePlayer = create<PlayerStore>()(persist((set,get)=>({
-  ep:null, series:null, playing:false, progress:0, duration:0, volume:0.8, rate:1,
+  ep:null,series:null,playing:false,progress:0,duration:0,volume:0.8,rate:1,
   setEp:(ep,s)=>set({ep,series:s,playing:true,progress:0}),
   setPlaying:(v)=>set({playing:v}),
   setProgress:(v)=>set({progress:v}),
   setDuration:(v)=>set({duration:v}),
   setVolume:(v)=>set({volume:v}),
   setRate:(v)=>set({rate:v}),
-  next:()=>{
-    const {ep,series}=get(); if(!ep||!series) return;
-    const idx=series.episodes.findIndex(e=>e._id===ep._id);
-    if(idx<series.episodes.length-1) set({ep:series.episodes[idx+1],playing:true,progress:0});
-  },
-  prev:()=>{
-    const {ep,series}=get(); if(!ep||!series) return;
-    const idx=series.episodes.findIndex(e=>e._id===ep._id);
-    if(idx>0) set({ep:series.episodes[idx-1],playing:true,progress:0});
-  },
+  next:()=>{const{ep,series}=get();if(!ep||!series)return;const idx=series.episodes.findIndex(e=>e._id===ep._id);if(idx<series.episodes.length-1)set({ep:series.episodes[idx+1],playing:true,progress:0});},
+  prev:()=>{const{ep,series}=get();if(!ep||!series)return;const idx=series.episodes.findIndex(e=>e._id===ep._id);if(idx>0)set({ep:series.episodes[idx-1],playing:true,progress:0});},
 }),{name:"naad-player",partialize:(s)=>({volume:s.volume,rate:s.rate})}));
 
 interface CartStore {
@@ -38,11 +30,7 @@ interface CartStore {
 }
 export const useCart = create<CartStore>()(persist((set,get)=>({
   items:[],
-  add:(p,qty=1)=>set(s=>{
-    const ex=s.items.find(i=>i.product._id===p._id);
-    return ex ? {items:s.items.map(i=>i.product._id===p._id?{...i,quantity:i.quantity+qty}:i)}
-              : {items:[...s.items,{product:p,quantity:qty}]};
-  }),
+  add:(p,qty=1)=>set(s=>{const ex=s.items.find(i=>i.product._id===p._id);return ex?{items:s.items.map(i=>i.product._id===p._id?{...i,quantity:i.quantity+qty}:i)}:{items:[...s.items,{product:p,quantity:qty}]};}),
   remove:(id)=>set(s=>({items:s.items.filter(i=>i.product._id!==id)})),
   qty:(id,q)=>set(s=>({items:q<=0?s.items.filter(i=>i.product._id!==id):s.items.map(i=>i.product._id===id?{...i,quantity:q}:i)})),
   clear:()=>set({items:[]}),
@@ -51,10 +39,18 @@ export const useCart = create<CartStore>()(persist((set,get)=>({
 }),{name:"naad-cart"}));
 
 interface AppStore {
-  theme:Theme; setTheme:(t:Theme)=>void;
-  liked:string[]; toggleLike:(id:string)=>void;
+  theme: Theme;
+  setTheme:(t:Theme)=>void;
+  liked:string[];
+  toggleLike:(id:string)=>void;
+  user: User|null;
+  setUser:(u:User|null)=>void;
 }
-export const useApp = create<AppStore>()(persist((set,get)=>({
-  theme:"midnight", setTheme:(t)=>set({theme:t}),
-  liked:[], toggleLike:(id)=>set(s=>({liked:s.liked.includes(id)?s.liked.filter(x=>x!==id):[...s.liked,id]})),
+export const useApp = create<AppStore>()(persist((set)=>({
+  theme: "midnight-dark" as Theme,
+  setTheme:(t)=>set({theme:t}),
+  liked:[],
+  toggleLike:(id)=>set(s=>({liked:s.liked.includes(id)?s.liked.filter(x=>x!==id):[...s.liked,id]})),
+  user: null,
+  setUser:(u)=>set({user:u}),
 }),{name:"naad-app"}));

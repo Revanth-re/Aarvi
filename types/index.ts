@@ -1,4 +1,10 @@
-export type Theme = "midnight"|"forest"|"desert"|"ocean"|"rose"|"mono";
+export type Theme =
+  | "midnight-dark" | "midnight-light"
+  | "forest-dark"   | "forest-light"
+  | "desert-dark"   | "desert-light"
+  | "ocean-dark"    | "ocean-light"
+  | "rose-dark"     | "rose-light"
+  | "mono-dark"     | "mono-light";
 
 export interface Episode {
   _id: string; title: string; description: string;
@@ -19,3 +25,6 @@ export interface Product {
   tags: string[]; isFeatured: boolean; createdAt: string;
 }
 export interface CartItem { product: Product; quantity: number; }
+export interface User {
+  _id: string; name?: string; email?: string; image?: string; createdAt: string;
+}
