@@ -14,6 +14,7 @@ import ReactionOverlay from "./ReactionOverlay";
 import Avatar from "./Avatar";
 import MemberList, { RoomMemberView } from "./MemberList";
 import RoomChatPanel, { ChatMessage } from "./RoomChatPanel";
+import HoverBridge from "./HoverBridge";
 
 function fmt(s: number) {
   const m = Math.floor(s / 60);
@@ -562,6 +563,7 @@ export default function MiniPlayer() {
                   <div className="eq"><span style={{height:8}}/><span/><span/><span style={{height:10}}/></div>
                 </div>
               )}
+              <HoverBridge audioEl={ref.current} playing={playing} barCount={8} />
             </div>
             <div style={{ minWidth: 0 }}>
               <p style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ep.title}</p>
@@ -651,10 +653,12 @@ export default function MiniPlayer() {
               width: "100%", aspectRatio: "1", borderRadius: 20, overflow: "hidden",
               background: "var(--surface2)", marginBottom: 32,
               boxShadow: "0 20px 60px rgba(0,0,0,.5)",
+              position: "relative",
             }}>
               {series?.coverImage && (
                 <img src={series.coverImage} alt={ep.title} style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
               )}
+              <HoverBridge audioEl={ref.current} playing={playing} barCount={16} />
             </div>
 
             {/* Title & Series */}

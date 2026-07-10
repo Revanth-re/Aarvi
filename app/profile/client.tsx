@@ -41,20 +41,44 @@ function ProfilePageClient() {
       .catch(() => setLoading(false));
   }, []);
 
+  // Fetches all three People lists independently. This used to use
+  // Promise.all, which meant if EVEN ONE of the three endpoints failed
+  // (a 404 from a route that didn't get deployed, a transient network
+  // blip, etc.) the whole thing rejected and ALL THREE lists silently
+  // stayed empty — including Requests — with no visible error
+  // anywhere. Each fetch below now fails independently and logs to
+  // the console instead of getting swallowed, so a real problem shows
+  // up as a console error instead of just looking like "no requests".
   const loadPeople = async () => {
     if (!user) return;
     setPeopleLoading(true);
+    const fetchList = async (url: string, key: string): Promise<PersonCard[]> => {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) {
+          console.error(`[profile] ${url} returned HTTP ${res.status}`);
+          return [];
+        }
+        const data = await res.json();
+        if (data.error) {
+          console.error(`[profile] ${url} error:`, data.error);
+          return [];
+        }
+        return data[key] || [];
+      } catch (err) {
+        console.error(`[profile] ${url} failed:`, err);
+        return [];
+      }
+    };
     try {
-      const [followingRes, followersRes, requestsRes] = await Promise.all([
-        fetch(`/api/users/${user._id}/following`).then(r => r.json()),
-        fetch(`/api/users/${user._id}/followers`).then(r => r.json()),
-        fetch(`/api/users/${user._id}/follow-requests`).then(r => r.json()),
+      const [following, followers, requests] = await Promise.all([
+        fetchList(`/api/users/${user._id}/following`, "following"),
+        fetchList(`/api/users/${user._id}/followers`, "followers"),
+        fetchList(`/api/users/${user._id}/follow-requests`, "requests"),
       ]);
-      setFollowingList(followingRes.following || []);
-      setFollowersList(followersRes.followers || []);
-      setRequestsList(requestsRes.requests || []);
-    } catch {
-      // silent — lists just stay empty, page still usable
+      setFollowingList(following);
+      setFollowersList(followers);
+      setRequestsList(requests);
     } finally {
       setPeopleLoading(false);
     }
@@ -66,8 +90,6 @@ function ProfilePageClient() {
   // accepts, or declines a follow request, the notification arrives
   // over Pusher on our personal channel — re-pull the People lists
   // right then instead of waiting for a navigation/reload to notice.
-  // This is what was actually broken before: the lists only ever
-  // refetched from mount-time state changes, never from a live push.
   useEffect(() => {
     if (!user?._id) return;
     const pusher = getPusherClient();
