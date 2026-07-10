@@ -56,6 +56,9 @@ export async function GET(request: NextRequest) {
       image:     user.image,
       createdAt: user.createdAt,
       favorites: user.favorites || [],
+      following: user.following || [],
+      followRequestsReceived: user.followRequestsReceived || [],
+      followRequestsSent:     user.followRequestsSent || [],
       playlists: (user.playlists || []).map((p: { _id: { toString(): string }; name: string; items: unknown[]; createdAt: Date }) => ({
         _id:       p._id.toString(),
         name:      p.name,

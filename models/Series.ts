@@ -1,9 +1,21 @@
 import mongoose, { Schema } from "mongoose";
+
+const TranscriptSegmentSchema = new Schema({
+  text:  { type: String, required: true },
+  start: { type: Number, required: true }, // seconds
+  end:   { type: Number, required: true }, // seconds
+}, { _id: false });
+
 const EpSchema = new Schema({
   title:{type:String,required:true}, description:{type:String,default:""},
   duration:{type:Number,default:0}, audioUrl:{type:String,default:""},
   episodeNumber:{type:Number,required:true}, isLocked:{type:Boolean,default:false},
   transcript:{type:String,default:""}, playCount:{type:Number,default:0},
+  // Auto-generated (Gemini) timestamped transcript, used for the
+  // synced/karaoke-style highlighting view. Separate from the plain
+  // `transcript` field above, which stays editable/manual.
+  transcriptSegments:{type:[TranscriptSegmentSchema],default:[]},
+  transcriptStatus:{type:String,enum:["none","pending","ready","failed"],default:"none"},
 },{timestamps:true});
 const SeriesSchema = new Schema({
   title:{type:String,required:true}, description:{type:String,required:true},

@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Series, Episode } from "@/types";
-import { Plus, Trash2, ChevronDown, ChevronUp, Save, ArrowLeft } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronUp, Save, ArrowLeft, RefreshCw, CheckCircle2, XCircle, Clock3 } from "lucide-react";
 import FileUpload from "./FileUpload";
 import { adminFetch } from "@/lib/adminFetch";
 
@@ -15,6 +15,7 @@ export default function SeriesForm({ initial={}, isEdit=false }: Props) {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  const [transcribing, setTranscribing] = useState<number|null>(null);
 
   const [form, setForm] = useState({
     title: initial.title||"",
@@ -37,11 +38,34 @@ export default function SeriesForm({ initial={}, isEdit=false }: Props) {
   const set = (k:string,v: unknown) => setForm(f=>({...f,[k]:v}));
 
   const addEp = () => {
-    setEps(eps=>[...eps,{title:"",description:"",duration:0,audioUrl:"",episodeNumber:eps.length+1,isLocked:false,transcript:"",playCount:0}]);
+    setEps(eps=>[...eps,{title:"",description:"",duration:0,audioUrl:"",episodeNumber:eps.length+1,isLocked:false,transcript:"",playCount:0,transcriptSegments:[],transcriptStatus:"none"}]);
     setExpandedEp(episodes.length);
   };
   const delEp = (i:number) => setEps(eps=>eps.filter((_,j)=>j!==i).map((e,j)=>({...e,episodeNumber:j+1})));
   const setEp = (i:number,k:string,v: unknown) => setEps(eps=>eps.map((e,j)=>j===i?{...e,[k]:v}:e));
+
+  // Manual retry — mostly useful for episodes whose auto-generation on
+  // save failed (timed out, Gemini error, etc). Only works for an
+  // episode that's already been saved at least once (needs a real
+  // seriesId + episode _id to update in place).
+  const regenerateTranscript = async (i: number) => {
+    const seriesId = (initial as Series)._id;
+    const epId = episodes[i]._id;
+    if (!seriesId || !epId) return;
+    setTranscribing(i);
+    try {
+      const r = await adminFetch("/api/admin/transcribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seriesId, episodeId: epId }),
+      });
+      const d = await r.json();
+      if (d.error) { setErr(d.error); return; }
+      setEp(i, "transcriptSegments", d.transcriptSegments || []);
+      setEp(i, "transcriptStatus", d.transcriptStatus || "failed");
+    } catch (e) { setErr(String(e)); }
+    finally { setTranscribing(null); }
+  };
 
   const submit = async () => {
     if(!form.title.trim()){setErr("Title is required.");return;}
@@ -64,6 +88,13 @@ export default function SeriesForm({ initial={}, isEdit=false }: Props) {
       <input className="inp" type={type} placeholder={placeholder} value={String((form as Record<string,unknown>)[key]||"")} onChange={e=>set(key, type==="number"?+e.target.value:e.target.value)}/>
     </div>
   );
+
+  const transcriptBadge = (status?: string) => {
+    if (status === "ready") return <span style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"var(--success, #4ade80)"}}><CheckCircle2 size={12}/>Transcript ready</span>;
+    if (status === "pending") return <span style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"var(--muted)"}}><Clock3 size={12}/>Generating…</span>;
+    if (status === "failed") return <span style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"var(--danger)"}}><XCircle size={12}/>Transcript failed</span>;
+    return <span style={{fontSize:11,color:"var(--muted)"}}>No auto-transcript yet</span>;
+  };
 
   return (
     <div style={{padding:"32px",maxWidth:900, marginBottom: 80}}>
@@ -122,7 +153,7 @@ export default function SeriesForm({ initial={}, isEdit=false }: Props) {
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20,paddingBottom:12,borderBottom:"1px solid var(--border)"}}>
             <div>
               <h2 style={{fontSize:15,fontWeight:600,color:"var(--text)"}}>Episodes</h2>
-              <p style={{fontSize:12,color:"var(--muted)",marginTop:2}}>{episodes.length} episode{episodes.length!==1?"s":""}</p>
+              <p style={{fontSize:12,color:"var(--muted)",marginTop:2}}>{episodes.length} episode{episodes.length!==1?"s":""} · transcripts auto-generate on save</p>
             </div>
             <button className="btn btn-primary btn-sm" onClick={addEp}><Plus size={14}/>Add Episode</button>
           </div>
@@ -165,8 +196,20 @@ export default function SeriesForm({ initial={}, isEdit=false }: Props) {
                       <input className="inp" type="number" value={ep.duration||0} onChange={e=>setEp(i,"duration",+e.target.value)}/>
                     </div>
                     <div style={{gridColumn:"1/-1"}}>
-                      <label style={{display:"block",fontSize:12,fontWeight:500,color:"var(--muted)",marginBottom:6}}>Transcript</label>
+                      <label style={{display:"block",fontSize:12,fontWeight:500,color:"var(--muted)",marginBottom:6}}>Transcript (manual / notes)</label>
                       <textarea className="inp" rows={5} value={ep.transcript||""} onChange={e=>setEp(i,"transcript",e.target.value)} placeholder="Full episode transcript..." style={{resize:"vertical"}}/>
+                    </div>
+                    <div style={{gridColumn:"1/-1", display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 12px", borderRadius:8, background:"var(--surface2)"}}>
+                      {transcriptBadge(ep.transcriptStatus)}
+                      <button
+                        className="btn btn-ghost btn-xs"
+                        disabled={!ep._id || !ep.audioUrl || transcribing===i}
+                        onClick={()=>regenerateTranscript(i)}
+                        title={!ep._id ? "Save the series first to generate a transcript" : !ep.audioUrl ? "Upload audio first" : undefined}
+                      >
+                        <RefreshCw size={12} style={transcribing===i?{animation:"spin 1s linear infinite"}:undefined}/>
+                        {transcribing===i ? "Generating…" : ep.transcriptStatus === "ready" ? "Regenerate" : "Generate transcript"}
+                      </button>
                     </div>
                     <div style={{gridColumn:"1/-1"}}>
                       <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:14,color:"var(--text)"}}>
@@ -189,6 +232,8 @@ export default function SeriesForm({ initial={}, isEdit=false }: Props) {
           </button>
         </div>
       </div>
+
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

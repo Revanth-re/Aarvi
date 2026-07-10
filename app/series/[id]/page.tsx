@@ -1,13 +1,61 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Series, Episode, FriendProgress } from "@/types";
 import { usePlayer, useApp, useToast } from "@/store";
-import { Play, Pause, Lock, Heart, Star, Clock, ArrowLeft, Mic, FileText, Globe, Users, ListPlus } from "lucide-react";
+import { Play, Pause, Lock, Heart, Star, Clock, ArrowLeft, Mic, FileText, Globe, Users, ListPlus, Clock3 } from "lucide-react";
 import Avatar from "@/components/ui/Avatar";
 
 function fmt(s: number) { return `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,"0")}`; }
+
+// Karaoke-style highlighted transcript. When the selected episode is
+// the one actually playing, the line covering the current playback
+// position is highlighted and auto-scrolled into view; clicking any
+// line seeks playback there (switching episodes first if needed).
+function SyncedTranscript({ episode, isActive, progress, onSeek }: {
+  episode: Episode; isActive: boolean; progress: number; onSeek: (t: number) => void;
+}) {
+  const segments = episode.transcriptSegments || [];
+  let activeIndex = isActive ? segments.findIndex(s => progress >= s.start && progress < s.end) : -1;
+  if (isActive && activeIndex === -1 && segments.length > 0 && progress >= segments[segments.length - 1].start) {
+    activeIndex = segments.length - 1;
+  }
+  const activeRef = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    if (activeIndex >= 0 && activeRef.current) {
+      activeRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [activeIndex]);
+
+  return (
+    <div className="card" style={{ padding: 24 }}>
+      <h3 style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginBottom: 20, fontFamily: "var(--ff-serif)", fontStyle: "italic" }}>{episode.title}</h3>
+      <div style={{ maxHeight: 480, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
+        {segments.map((seg, i) => (
+          <p
+            key={i}
+            ref={i === activeIndex ? activeRef : undefined}
+            onClick={() => onSeek(seg.start)}
+            style={{
+              fontSize: 15, lineHeight: 1.9, cursor: "pointer", padding: "5px 8px", borderRadius: 6,
+              color: i === activeIndex ? "var(--accent)" : i < activeIndex ? "var(--text3)" : "var(--text2)",
+              background: i === activeIndex ? "var(--accent)15" : "transparent",
+              fontWeight: i === activeIndex ? 600 : 400,
+              transition: "background .2s, color .2s",
+            }}
+          >
+            {seg.text}
+          </p>
+        ))}
+      </div>
+      <p style={{ fontSize: 12, color: "var(--text3)", marginTop: 14 }}>
+        {isActive ? "Following along with playback — tap any line to jump there." : "Tap any line to play from there."}
+      </p>
+    </div>
+  );
+}
 
 export default function SeriesDetail() {
   const { id } = useParams() as { id: string };
@@ -16,7 +64,7 @@ export default function SeriesDetail() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"episodes"|"about"|"transcript">("episodes");
   const [activeEp, setActiveEp] = useState<Episode|null>(null);
-  const { ep: curEp, playing, setEp, setPlaying } = usePlayer();
+  const { ep: curEp, playing, progress, setEp, setPlaying, requestSeek } = usePlayer();
   const { liked, toggleLike, user, setUser } = useApp();
   const showToast = useToast(s => s.show);
   const [friends, setFriends] = useState<FriendProgress[]>([]);
@@ -95,6 +143,19 @@ export default function SeriesDetail() {
       setShowPlaylistModal(false);
     } catch { showToast("Network error — couldn't update playlist", "error"); }
     finally { setAddingTo(null); }
+  };
+
+  // Jump playback to a specific moment in the transcript. If a
+  // different episode is selected in the transcript tab than what's
+  // currently playing, switch to it first.
+  const seekFromTranscript = (t: number) => {
+    if (!activeEp) return;
+    if (curEp?._id !== activeEp._id) {
+      setEp(activeEp, series);
+      setTimeout(() => requestSeek(t), 50);
+    } else {
+      requestSeek(t);
+    }
   };
 
   return (
@@ -193,7 +254,7 @@ export default function SeriesDetail() {
                   <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
                     <span style={{ fontSize: 13, fontWeight: 600, color: isCur ? "var(--accent)" : "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ep.title}</span>
                     {ep.isLocked && <span className="badge badge-muted" style={{ fontSize: 10, flexShrink: 0 }}>Premium</span>}
-                    {ep.transcript && <FileText size={11} color="var(--text3)" style={{ flexShrink: 0 }}/>}
+                    {(ep.transcript || (ep.transcriptSegments && ep.transcriptSegments.length > 0)) && <FileText size={11} color="var(--text3)" style={{ flexShrink: 0 }}/>}
                   </div>
                   {ep.description && <p style={{ fontSize: 12, color: "var(--text3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>{ep.description}</p>}
                 </div>
@@ -228,13 +289,26 @@ export default function SeriesDetail() {
       {tab === "transcript" && (
         <div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-            {series.episodes?.filter(e => e.transcript).map(ep => (
+            {series.episodes?.filter(e => e.transcript || (e.transcriptSegments && e.transcriptSegments.length > 0) || e.transcriptStatus === "pending").map(ep => (
               <button key={ep._id} onClick={() => setActiveEp(ep)} style={{ padding: "6px 14px", borderRadius: 8, border: `1px solid ${activeEp?._id===ep._id?"var(--accent)":"var(--border2)"}`, background: activeEp?._id===ep._id?"var(--accent)":"var(--surface)", color: activeEp?._id===ep._id?"#fff":"var(--text3)", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>
                 Ep {ep.episodeNumber}: {ep.title}
               </button>
             ))}
           </div>
-          {activeEp?.transcript ? (
+
+          {activeEp && activeEp.transcriptSegments && activeEp.transcriptSegments.length > 0 ? (
+            <SyncedTranscript
+              episode={activeEp}
+              isActive={curEp?._id === activeEp._id}
+              progress={progress}
+              onSeek={seekFromTranscript}
+            />
+          ) : activeEp?.transcriptStatus === "pending" ? (
+            <div style={{ textAlign: "center", padding: "60px 0" }}>
+              <Clock3 size={32} color="var(--text3)" style={{ margin: "0 auto 12px" }}/>
+              <p style={{ color: "var(--text3)", fontSize: 14 }}>Transcript is generating — check back shortly.</p>
+            </div>
+          ) : activeEp?.transcript ? (
             <div className="card" style={{ padding: 24 }}>
               <h3 style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginBottom: 20, fontFamily: "var(--ff-serif)", fontStyle: "italic" }}>{activeEp.title}</h3>
               <div style={{ fontSize: 15, color: "var(--text2)", lineHeight: 2, whiteSpace: "pre-wrap" }}>{activeEp.transcript}</div>

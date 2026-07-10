@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { SeriesModel } from "@/models/Series";
 import { requireAdmin } from "@/lib/requireAdmin";
+import { processEpisodeTranscripts } from "@/lib/gemini";
+
+export const maxDuration = 300;
 
 type P = { params: Promise<{ id: string }> };
 
@@ -22,7 +25,11 @@ export async function PUT(req: NextRequest, { params }: P) {
     await connectDB();
     const { id } = await params;
     const body = await req.json();
-    if (body.episodes) body.totalEpisodes = body.episodes.length;
+    if (body.episodes) {
+      const existingDoc = await SeriesModel.findById(id).select("episodes").lean();
+      body.episodes = await processEpisodeTranscripts(body.episodes, existingDoc?.episodes || []);
+      body.totalEpisodes = body.episodes.length;
+    }
     const doc = await SeriesModel.findByIdAndUpdate(id, body, { new: true }).lean();
     return NextResponse.json(doc);
   } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }

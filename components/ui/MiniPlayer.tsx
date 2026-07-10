@@ -6,10 +6,14 @@ import { usePlayer, useApp, useToast } from "@/store";
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, X,
   ChevronUp, ChevronDown, RotateCcw, RotateCw, Moon, Heart,
-  Users, Copy, Share2
+  Users, Copy, Share2, MessageCircle
 } from "lucide-react";
 import { getPusherClient } from "@/lib/pusherClient";
+import { playChatDing } from "@/lib/chatSound";
 import ReactionOverlay from "./ReactionOverlay";
+import Avatar from "./Avatar";
+import MemberList, { RoomMemberView } from "./MemberList";
+import RoomChatPanel, { ChatMessage } from "./RoomChatPanel";
 
 function fmt(s: number) {
   const m = Math.floor(s / 60);
@@ -34,6 +38,12 @@ const PROGRESS_SYNC_INTERVAL = 12000;
 // How often (ms) the host re-broadcasts position to a listen-together
 // room, so anyone who joins mid-episode catches up.
 const ROOM_HEARTBEAT_INTERVAL = 4000;
+// A listener who hasn't heartbeated in this long is considered gone.
+const MEMBER_STALE_MS = 25000;
+const MEMBER_PRUNE_INTERVAL = 10000;
+const HOST_CLIENT_ID = "host";
+
+type ChatMode = { type: "group" } | { type: "dm"; clientId: string; name: string; image: string };
 
 function genRoomCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no ambiguous chars
@@ -42,9 +52,16 @@ function genRoomCode() {
   return code;
 }
 
+function genId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+interface FollowedProfile { _id: string; name: string; image: string; }
+interface RoomMember { clientId: string; userId?: string; name: string; image: string; lastSeen: number; }
+
 export default function MiniPlayer() {
   const path = usePathname();
-  const { ep, series, playing, progress, duration, volume, rate, setPlaying, setProgress, setDuration, setVolume, setRate, next, prev } = usePlayer();
+  const { ep, series, playing, progress, duration, volume, rate, seekRequest, setPlaying, setProgress, setDuration, setVolume, setRate, clearSeekRequest, next, prev } = usePlayer();
   const { liked, toggleLike, user, setUser } = useApp();
   const showToast = useToast(s => s.show);
   const ref = useRef<HTMLAudioElement>(null);
@@ -58,13 +75,33 @@ export default function MiniPlayer() {
   const [showSleepPicker, setShowSleepPicker] = useState(false);
   const sleepRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressRef = useRef(progress);
+  const playingRef = useRef(playing);
+  const epRef = useRef(ep);
 
   // ─── Listen together (room) state ───
   const [room, setRoom] = useState<string | null>(null);
   const [showRoomModal, setShowRoomModal] = useState(false);
+  const [showListeners, setShowListeners] = useState(false);
   const [reactions, setReactions] = useState<{ id: number; emoji: string }[]>([]);
+  const [followingProfiles, setFollowingProfiles] = useState<FollowedProfile[]>([]);
+  const [invited, setInvited] = useState<string[]>([]);
+  const [members, setMembers] = useState<Record<string, RoomMember>>({});
+
+  // ─── Chat: group + private threads ───
+  const [showChat, setShowChat] = useState(false);
+  const [chatMode, setChatMode] = useState<ChatMode>({ type: "group" });
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [unreadGroup, setUnreadGroup] = useState(0);
+  const [unreadDm, setUnreadDm] = useState<Record<string, number>>({});
+  const chatModeRef = useRef(chatMode);
+  const showChatRef = useRef(showChat);
+  const ackedReadIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => { progressRef.current = progress; }, [progress]);
+  useEffect(() => { playingRef.current = playing; }, [playing]);
+  useEffect(() => { epRef.current = ep; }, [ep]);
+  useEffect(() => { chatModeRef.current = chatMode; }, [chatMode]);
+  useEffect(() => { showChatRef.current = showChat; }, [showChat]);
 
   useEffect(() => { if (ep) setDismissed(false); }, [ep?._id]);
   useEffect(() => { if (!ref.current || !ep) return; ref.current.src = ep.audioUrl; ref.current.load(); if (playing) ref.current.play().catch(() => {}); }, [ep?._id]);
@@ -86,6 +123,17 @@ export default function MiniPlayer() {
     const iv = setInterval(saveProgress, PROGRESS_SYNC_INTERVAL);
     return () => { clearInterval(iv); saveProgress(); };
   }, [ep?._id, series?._id, user?._id, playing]);
+
+  // Load the people this user follows whenever the room modal opens,
+  // so we can offer an in-app "Invite" button next to each of them.
+  useEffect(() => {
+    if (!showRoomModal || !user) return;
+    const ids = user.following || [];
+    if (ids.length === 0) { setFollowingProfiles([]); return; }
+    Promise.all(
+      ids.map(id => fetch(`/api/users/${id}`).then(r => r.json()).catch(() => null))
+    ).then(results => setFollowingProfiles(results.filter(r => r && !r.error)));
+  }, [showRoomModal, user]);
 
   // ─── Listen together: broadcast helper + heartbeat + reactions ───
   const broadcastEvent = useCallback((type: string, payload?: Record<string, unknown>) => {
@@ -115,21 +163,180 @@ export default function MiniPlayer() {
     return () => clearTimeout(t);
   }, [reactions]);
 
+  // Prune listeners who've gone quiet (closed the tab without firing
+  // the member-leave event — e.g. a hard refresh or a dead connection).
+  useEffect(() => {
+    if (!room) return;
+    const iv = setInterval(() => {
+      const cutoff = Date.now() - MEMBER_STALE_MS;
+      setMembers(m => {
+        const next: Record<string, RoomMember> = {};
+        for (const [k, v] of Object.entries(m)) if (v.lastSeen >= cutoff) next[k] = v;
+        return next;
+      });
+    }, MEMBER_PRUNE_INTERVAL);
+    return () => clearInterval(iv);
+  }, [room]);
+
+  // Let joiners see the live count too.
+  useEffect(() => {
+    if (!room) return;
+    broadcastEvent("member-count", { count: Object.keys(members).length });
+  }, [room, members, broadcastEvent]);
+
+  // Clear the group-chat unread badge once the panel is actually
+  // showing the group thread.
+  useEffect(() => {
+    if (showChat && chatMode.type === "group") setUnreadGroup(0);
+  }, [showChat, chatMode]);
+
+  // While a DM thread is open, mark any not-yet-acked incoming
+  // messages in it as read (sends a "chat-read" receipt so the other
+  // side's tick turns into a blue double-check) and clear its badge.
+  useEffect(() => {
+    if (!room || !showChat || chatMode.type !== "dm") return;
+    const otherId = chatMode.clientId;
+    const unacked = chatMessages.filter(m => m.toClientId === HOST_CLIENT_ID && m.clientId === otherId && !ackedReadIdsRef.current.has(m.id));
+    if (unacked.length > 0) {
+      unacked.forEach(m => ackedReadIdsRef.current.add(m.id));
+      fetch(`/api/rooms/${room}/event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "chat-read", payload: { messageIds: unacked.map(m => m.id), from: HOST_CLIENT_ID, to: otherId } }),
+      }).catch(() => {});
+    }
+    setUnreadDm(m => (m[otherId] ? { ...m, [otherId]: 0 } : m));
+  }, [room, showChat, chatMode, chatMessages]);
+
   const startRoom = () => {
     if (!series || !ep) return;
     const code = genRoomCode();
     const pusher = getPusherClient();
     const channel = pusher.subscribe(`room-${code}`);
+
     channel.bind("reaction", (data: { emoji: string }) => {
       setReactions(rs => [...rs, { id: Date.now() + Math.random(), emoji: data.emoji }]);
     });
+
+    channel.bind("chat-message", (data: ChatMessage) => {
+      setChatMessages(prev => [...prev, data]);
+
+      const isSelf = data.clientId === HOST_CLIENT_ID;
+      if (isSelf) return;
+
+      const isGroup = !data.toClientId;
+      const isDmToMe = data.toClientId === HOST_CLIENT_ID;
+      if (!isGroup && !isDmToMe) return; // someone else's DM — not for us
+
+      const mode = chatModeRef.current;
+      const isViewing = showChatRef.current && (
+        (isGroup && mode.type === "group") ||
+        (isDmToMe && mode.type === "dm" && mode.clientId === data.clientId)
+      );
+
+      if (!isViewing) {
+        playChatDing();
+        if (isGroup) setUnreadGroup(n => n + 1);
+        else setUnreadDm(m => ({ ...m, [data.clientId]: (m[data.clientId] || 0) + 1 }));
+      }
+
+      if (isDmToMe) {
+        fetch(`/api/rooms/${code}/event`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "chat-delivered", payload: { messageId: data.id, from: HOST_CLIENT_ID, to: data.clientId } }),
+        }).catch(() => {});
+      }
+    });
+
+    channel.bind("chat-delivered", (data: { messageId: string; to: string }) => {
+      if (data.to !== HOST_CLIENT_ID) return;
+      setChatMessages(prev => prev.map(m => (m.id === data.messageId && m.status !== "read") ? { ...m, status: "delivered" } : m));
+    });
+    channel.bind("chat-read", (data: { messageIds: string[]; to: string }) => {
+      if (data.to !== HOST_CLIENT_ID) return;
+      setChatMessages(prev => prev.map(m => data.messageIds.includes(m.id) ? { ...m, status: "read" } : m));
+    });
+
+    // A joiner just subscribed and asked for the current state — reply
+    // with exactly where we are right now so they catch up instantly,
+    // and re-announce ourselves so they see the host in their member
+    // list even if they joined after our first announcement.
+    channel.bind("sync-request", () => {
+      fetch(`/api/rooms/${code}/event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "sync-state",
+          payload: { episodeId: epRef.current?._id, position: progressRef.current, playing: playingRef.current },
+        }),
+      }).catch(() => {});
+      fetch(`/api/rooms/${code}/event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "member-join",
+          payload: { clientId: HOST_CLIENT_ID, userId: user?._id, name: user?.name || "Host", image: user?.image || "" },
+        }),
+      }).catch(() => {});
+    });
+
+    channel.bind("member-join", (data: { clientId: string; userId?: string; name: string; image: string }) => {
+      if (!data.clientId || data.clientId === HOST_CLIENT_ID) return;
+      setMembers(m => ({ ...m, [data.clientId]: { ...data, lastSeen: Date.now() } }));
+    });
+    channel.bind("member-heartbeat", (data: { clientId: string; userId?: string; name: string; image: string }) => {
+      if (!data.clientId || data.clientId === HOST_CLIENT_ID) return;
+      setMembers(m => ({ ...m, [data.clientId]: { ...(m[data.clientId] || data), lastSeen: Date.now() } }));
+    });
+    channel.bind("member-leave", (data: { clientId: string }) => {
+      if (!data.clientId) return;
+      setMembers(m => {
+        const next = { ...m };
+        delete next[data.clientId];
+        return next;
+      });
+    });
+
+    // Announce the host so joiners can see who they're listening with.
+    fetch(`/api/rooms/${code}/event`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "member-join",
+        payload: { clientId: HOST_CLIENT_ID, userId: user?._id, name: user?.name || "Host", image: user?.image || "" },
+      }),
+    }).catch(() => {});
+
+    setMembers({});
+    setChatMessages([]);
+    setUnreadGroup(0);
+    setUnreadDm({});
+    setChatMode({ type: "group" });
+    setShowChat(false);
+    setShowListeners(false);
+    ackedReadIdsRef.current = new Set();
     setRoom(code);
+    setInvited([]);
     setShowRoomModal(true);
   };
 
   const stopRoom = () => {
-    if (room) getPusherClient().unsubscribe(`room-${room}`);
+    if (room) {
+      fetch(`/api/rooms/${room}/event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "room-ended", payload: {} }),
+      }).catch(() => {});
+      getPusherClient().unsubscribe(`room-${room}`);
+    }
     setRoom(null);
+    setMembers({});
+    setChatMessages([]);
+    setUnreadGroup(0);
+    setUnreadDm({});
+    setShowChat(false);
+    setShowListeners(false);
     setShowRoomModal(false);
     showToast("Listen together session ended", "info");
   };
@@ -149,6 +356,58 @@ export default function MiniPlayer() {
       copyRoomLink();
     }
   };
+
+  // In-app invite: sends a real notification (bell + live push) to a
+  // follower instead of making them wait for you to paste a link
+  // somewhere else. Scoped to people you follow, since that's the
+  // only way you'd have their profile to begin with.
+  const inviteFollower = async (target: FollowedProfile) => {
+    if (!room || !user) return;
+    try {
+      const res = await fetch(`/api/users/${target._id}/notifications`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "room_invite",
+          message: `${user.name || "Someone"} invited you to listen together — ${series?.title || "an episode"}`,
+          link: roomLink(),
+          fromUserId: user._id,
+          fromUserName: user.name,
+        }),
+      });
+      if (!res.ok) { showToast("Couldn't send invite", "error"); return; }
+      setInvited(prev => [...prev, target._id]);
+      showToast(`Invited ${target.name}`, "success");
+    } catch { showToast("Network error — couldn't send invite", "error"); }
+  };
+
+  const sendChatMessage = (text: string) => {
+    if (!room) return;
+    const msg: ChatMessage = {
+      id: genId(),
+      clientId: HOST_CLIENT_ID,
+      userId: user?._id,
+      name: user?.name || "Host",
+      image: user?.image || "",
+      text,
+      ts: Date.now(),
+      toClientId: chatMode.type === "dm" ? chatMode.clientId : undefined,
+      status: "sent",
+    };
+    broadcastEvent("chat-message", msg);
+  };
+
+  const openDm = (member: RoomMemberView) => {
+    setChatMode({ type: "dm", clientId: member.clientId, name: member.name, image: member.image });
+    setShowListeners(false);
+    setShowChat(true);
+  };
+
+  const visibleChatMessages = chatMode.type === "group"
+    ? chatMessages.filter(m => !m.toClientId)
+    : chatMessages.filter(m => (m.toClientId === chatMode.clientId && m.clientId === HOST_CLIENT_ID) || (m.toClientId === HOST_CLIENT_ID && m.clientId === chatMode.clientId));
+
+  const totalUnread = unreadGroup + Object.values(unreadDm).reduce((a, b) => a + b, 0);
 
   // Sleep timer logic
   const startSleep = useCallback((mins: number) => {
@@ -194,11 +453,20 @@ export default function MiniPlayer() {
     broadcastEvent(np ? "play" : "pause", { position: progressRef.current });
   };
 
-  const seekTo = (t: number) => {
+  const seekTo = useCallback((t: number) => {
     setProgress(t);
     if (ref.current) ref.current.currentTime = t;
     broadcastEvent("seek", { position: t });
-  };
+  }, [broadcastEvent, setProgress]);
+
+  // Anything elsewhere in the app (like the synced transcript view, or
+  // clicking a line in it) can ask for a seek via the shared store
+  // instead of needing direct access to the <audio> element.
+  useEffect(() => {
+    if (seekRequest == null) return;
+    seekTo(seekRequest);
+    clearSeekRequest();
+  }, [seekRequest, seekTo, clearSeekRequest]);
 
   const skip = (secs: number) => {
     if (!ref.current) return;
@@ -236,6 +504,7 @@ export default function MiniPlayer() {
   const pct = duration > 0 ? (progress / duration) * 100 : 0;
 
   const isLiked = series ? (user ? (user.favorites || []).includes(series._id) : liked.includes(series._id)) : false;
+  const memberCount = Object.keys(members).length;
 
   const handleToggleLike = async () => {
     if (!series) return;
@@ -273,7 +542,7 @@ export default function MiniPlayer() {
         {room && (
           <div style={{ position: "absolute", top: -28, left: 12, background: "var(--accent)", color: "#fff", fontSize: 10, fontWeight: 600, padding: "3px 9px", borderRadius: 6, display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}
             onClick={() => setShowRoomModal(true)}>
-            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff" }}/> LIVE · {room}
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff" }}/> LIVE · {room}{memberCount > 0 ? ` · ${memberCount} listening` : ""}
           </div>
         )}
 
@@ -608,23 +877,98 @@ export default function MiniPlayer() {
         </div>
       )}
 
-      {/* ─── Listen together room modal ─── */}
+      {/* ─── Listen together room modal (link/invite/end only) ─── */}
       {showRoomModal && room && (
         <div
           onClick={() => setShowRoomModal(false)}
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
         >
-          <div className="card" style={{ padding: 24, width: "100%", maxWidth: 360, textAlign: "center" }} onClick={e => e.stopPropagation()}>
+          <div className="card" style={{ padding: 24, width: "100%", maxWidth: 380, textAlign: "center" }} onClick={e => e.stopPropagation()}>
             <p style={{ fontSize: 12, color: "var(--text3)", textTransform: "uppercase", letterSpacing: .6, marginBottom: 10 }}>Listen together</p>
-            <p style={{ fontSize: 24, fontWeight: 700, color: "var(--text)", letterSpacing: 3, marginBottom: 18, fontFamily: "var(--ff-mono)" }}>{room}</p>
+            <p style={{ fontSize: 24, fontWeight: 700, color: "var(--text)", letterSpacing: 3, marginBottom: 10, fontFamily: "var(--ff-mono)" }}>{room}</p>
+
+            <button
+              onClick={() => { setShowListeners(true); }}
+              className="btn btn-ghost btn-sm"
+              style={{ marginBottom: 18 }}
+            >
+              <Users size={13}/> {memberCount === 0 ? "No one's joined yet" : `${memberCount} listening — view`}
+            </button>
+
+            {followingProfiles.length > 0 && (
+              <div style={{ textAlign: "left", marginBottom: 18 }}>
+                <p style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: .4, marginBottom: 8 }}>Invite a follower</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 160, overflowY: "auto" }}>
+                  {followingProfiles.map(f => (
+                    <div key={f._id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8, background: "var(--surface2)" }}>
+                      <Avatar name={f.name} image={f.image} size={22} />
+                      <span style={{ flex: 1, fontSize: 13, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
+                      <button className="btn btn-ghost btn-xs" disabled={invited.includes(f._id)} onClick={() => inviteFollower(f)}>
+                        {invited.includes(f._id) ? "Invited" : "Invite"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
               <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={copyRoomLink}><Copy size={13}/>Copy link</button>
               <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={shareRoomLink}><Share2 size={13}/>Share</button>
             </div>
-            <p style={{ fontSize: 12, color: "var(--text3)", marginBottom: 18 }}>Anyone with this link joins in sync — you stay in control of playback.</p>
+            <p style={{ fontSize: 12, color: "var(--text3)", marginBottom: 18 }}>
+              {followingProfiles.length > 0 ? "Or share this link with anyone else — you stay in control of playback." : "Anyone with this link joins in sync — you stay in control of playback."}
+            </p>
             <button className="btn btn-danger btn-sm" style={{ width: "100%" }} onClick={stopRoom}>End session</button>
           </div>
         </div>
+      )}
+
+      {/* ─── Listeners — its own section, separate from the link/invite card ─── */}
+      {showListeners && room && (
+        <div
+          onClick={() => setShowListeners(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", zIndex: 520, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+        >
+          <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 360 }}>
+            <MemberList
+              members={Object.values(members).map(m => ({ clientId: m.clientId, userId: m.userId, name: m.name, image: m.image }))}
+              onOpenDm={openDm}
+              unreadByClientId={unreadDm}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ─── Floating chat launcher — anchored bottom-right corner ─── */}
+      {room && (
+        <>
+          <button
+            onClick={() => setShowChat(s => !s)}
+            style={{ position: "fixed", right: 20, bottom: 84, zIndex: 450, width: 52, height: 52, borderRadius: "50%", background: "var(--accent)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 6px 20px rgba(0,0,0,.4)" }}
+            title="Group chat"
+          >
+            <MessageCircle size={22} color="#fff" />
+            {totalUnread > 0 && !showChat && (
+              <span style={{ position: "absolute", top: -2, right: -2, minWidth: 18, height: 18, padding: "0 4px", borderRadius: "50%", background: "var(--accent2)", color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid var(--bg)" }}>
+                {totalUnread > 9 ? "9+" : totalUnread}
+              </span>
+            )}
+          </button>
+
+          {showChat && (
+            <div style={{ position: "fixed", right: 20, bottom: 148, zIndex: 450, width: "min(360px, calc(100vw - 40px))", height: 460, boxShadow: "0 10px 40px rgba(0,0,0,.5)", borderRadius: 14 }}>
+              <RoomChatPanel
+                messages={visibleChatMessages}
+                selfClientId={HOST_CLIENT_ID}
+                onSend={sendChatMessage}
+                onClose={() => setShowChat(false)}
+                onBack={chatMode.type === "dm" ? () => setChatMode({ type: "group" }) : undefined}
+                title={chatMode.type === "group" ? `Group Chat${unreadGroup > 0 ? "" : ""}` : chatMode.name}
+              />
+            </div>
+          )}
+        </>
       )}
     </>
   );

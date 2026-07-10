@@ -21,8 +21,23 @@ const UserSchema = new Schema({
   name:      { type: String },
   image:     { type: String },
   favorites: [{ type: String }],  // series ids
+
   playlists: [PlaylistSchema],
-  following: [{ type: String }],  // user ids this user follows
+
+  // Accepted follows: people THIS user follows. A user's "followers"
+  // are never stored directly — they're computed on read as
+  // "everyone whose `following` array contains this user's id".
+  // That keeps the two always in sync with zero migration risk.
+  following: [{ type: String }],
+
+  // Instagram-style follow requests: following someone doesn't take
+  // effect until they accept. `followRequestsReceived` holds the IDs
+  // of people who've asked to follow this user; `followRequestsSent`
+  // mirrors that on the requester's own doc so the client can render
+  // a "Requested" button state without an extra fetch.
+  followRequestsReceived: [{ type: String }],
+  followRequestsSent:     [{ type: String }],
+
   createdAt: { type: Date, default: Date.now },
 });
 

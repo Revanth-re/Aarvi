@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { SeriesModel } from "@/models/Series";
 import { requireAdmin } from "@/lib/requireAdmin";
+import { processEpisodeTranscripts } from "@/lib/gemini";
+
+// Give transcript generation (Gemini upload + processing) room to run
+// before the platform's default serverless timeout kicks in. Actual
+// ceiling still depends on your hosting plan.
+export const maxDuration = 300;
 
 export async function GET(req: NextRequest) {
   try {
@@ -28,7 +34,8 @@ export async function POST(req: NextRequest) {
   try {
     await connectDB();
     const body = await req.json();
-    const doc = await SeriesModel.create({ ...body, totalEpisodes: body.episodes?.length || 0 });
+    const episodes = body.episodes?.length ? await processEpisodeTranscripts(body.episodes) : (body.episodes || []);
+    const doc = await SeriesModel.create({ ...body, episodes, totalEpisodes: episodes.length });
     return NextResponse.json(doc, { status: 201 });
   } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }
 }

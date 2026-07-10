@@ -7,6 +7,7 @@ import { ShoppingBag, Radio, Menu, X, Shield, Sun, Moon, LogIn, LogOut } from "l
 import { Theme } from "@/types";
 import { isAdminEmail } from "@/lib/admin";
 import Avatar from "./Avatar";
+import NotificationBell from "./NotificationBell";
 
 const THEMES = [
   { id:"midnight", label:"Midnight", dot:"#7c6af7", dark:"midnight-dark" as Theme, light:"midnight-light" as Theme },
@@ -124,6 +125,9 @@ export default function Navbar() {
                 </div>
               )}
             </div>
+
+            {/* Notifications */}
+            <NotificationBell/>
 
             {/* User / Login */}
             {user ? (

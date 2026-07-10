@@ -5,21 +5,31 @@ import { Episode, Series, Product, Theme, CartItem, User } from "@/types";
 interface PlayerStore {
   ep: Episode|null; series: Series|null; playing: boolean;
   progress: number; duration: number; volume: number; rate: number;
+  // A one-shot "please seek to this time" request. Anything (like the
+  // synced transcript view) that wants to jump playback to a specific
+  // moment sets this; MiniPlayer — the only thing that actually owns
+  // the <audio> element — watches it, applies it, and clears it back
+  // to null. Kept separate from `progress` (which just reports where
+  // playback currently is) so the two don't fight each other.
+  seekRequest: number|null;
   setEp:(ep:Episode,s:Series)=>void; setPlaying:(v:boolean)=>void;
   setProgress:(v:number)=>void; setDuration:(v:number)=>void;
   setVolume:(v:number)=>void; setRate:(v:number)=>void;
+  requestSeek:(t:number)=>void; clearSeekRequest:()=>void;
   next:()=>void; prev:()=>void;
 }
 export const usePlayer = create<PlayerStore>()(persist((set,get)=>({
-  ep:null,series:null,playing:false,progress:0,duration:0,volume:0.8,rate:1,
-  setEp:(ep,s)=>set({ep,series:s,playing:true,progress:0}),
+  ep:null,series:null,playing:false,progress:0,duration:0,volume:0.8,rate:1,seekRequest:null,
+  setEp:(ep,s)=>set({ep,series:s,playing:true,progress:0,seekRequest:null}),
   setPlaying:(v)=>set({playing:v}),
   setProgress:(v)=>set({progress:v}),
   setDuration:(v)=>set({duration:v}),
   setVolume:(v)=>set({volume:v}),
   setRate:(v)=>set({rate:v}),
-  next:()=>{const{ep,series}=get();if(!ep||!series)return;const idx=series.episodes.findIndex(e=>e._id===ep._id);if(idx<series.episodes.length-1)set({ep:series.episodes[idx+1],playing:true,progress:0});},
-  prev:()=>{const{ep,series}=get();if(!ep||!series)return;const idx=series.episodes.findIndex(e=>e._id===ep._id);if(idx>0)set({ep:series.episodes[idx-1],playing:true,progress:0});},
+  requestSeek:(t)=>set({seekRequest:t}),
+  clearSeekRequest:()=>set({seekRequest:null}),
+  next:()=>{const{ep,series}=get();if(!ep||!series)return;const idx=series.episodes.findIndex(e=>e._id===ep._id);if(idx<series.episodes.length-1)set({ep:series.episodes[idx+1],playing:true,progress:0,seekRequest:null});},
+  prev:()=>{const{ep,series}=get();if(!ep||!series)return;const idx=series.episodes.findIndex(e=>e._id===ep._id);if(idx>0)set({ep:series.episodes[idx-1],playing:true,progress:0,seekRequest:null});},
 }),{name:"naad-player",partialize:(s)=>({volume:s.volume,rate:s.rate})}));
 
 interface CartStore {

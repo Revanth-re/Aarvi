@@ -3,9 +3,12 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useApp, useToast } from "@/store";
 import Avatar from "@/components/ui/Avatar";
-import { Calendar, UserPlus, UserCheck } from "lucide-react";
+import { Calendar, UserPlus, UserCheck, Clock } from "lucide-react";
 
-interface PublicUser { _id: string; name: string; image: string; createdAt: string; }
+interface PublicUser {
+  _id: string; name: string; image: string; createdAt: string;
+  followerCount: number; followingCount: number;
+}
 
 export default function PublicProfilePage() {
   const { id } = useParams() as { id: string };
@@ -26,6 +29,7 @@ export default function PublicProfilePage() {
   }, [id, user]);
 
   const isFollowing = user ? (user.following || []).includes(id) : false;
+  const isRequested = user ? (user.followRequestsSent || []).includes(id) : false;
 
   const toggleFollow = async () => {
     if (!user) { router.push("/login"); return; }
@@ -38,8 +42,10 @@ export default function PublicProfilePage() {
       });
       const data = await res.json();
       if (!res.ok || data.error) { showToast(data.error || "Couldn't update follow", "error"); return; }
-      setUser({ ...user, following: data.following });
-      showToast(isFollowing ? "Unfollowed" : "Now following", "success");
+      setUser({ ...user, following: data.following, followRequestsSent: data.followRequestsSent });
+      if (data.status === "requested") showToast("Follow request sent", "success");
+      else if (isFollowing) showToast("Unfollowed", "success");
+      else showToast("Request cancelled", "info");
     } catch { showToast("Network error", "error"); }
     finally { setBusy(false); }
   };
@@ -57,14 +63,20 @@ export default function PublicProfilePage() {
         <Avatar name={profile.name} image={profile.image} size={68} />
         <div style={{ minWidth: 200, flex: 1 }}>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>{profile.name}</h1>
-          {profile.createdAt && (
-            <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, color: "var(--text3)" }}>
-              <Calendar size={13} />Joined {new Date(profile.createdAt).toLocaleDateString(undefined, { month: "long", year: "numeric" })}
-            </span>
-          )}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 14, fontSize: 13, color: "var(--text3)", marginBottom: 6 }}>
+            {profile.createdAt && (
+              <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <Calendar size={13} />Joined {new Date(profile.createdAt).toLocaleDateString(undefined, { month: "long", year: "numeric" })}
+              </span>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 16, fontSize: 13 }}>
+            <span><strong style={{ color: "var(--text)" }}>{profile.followerCount}</strong> <span style={{ color: "var(--text3)" }}>followers</span></span>
+            <span><strong style={{ color: "var(--text)" }}>{profile.followingCount}</strong> <span style={{ color: "var(--text3)" }}>following</span></span>
+          </div>
         </div>
-        <button className={`btn btn-sm ${isFollowing ? "btn-ghost" : "btn-primary"}`} onClick={toggleFollow} disabled={busy}>
-          {isFollowing ? <><UserCheck size={14} />Following</> : <><UserPlus size={14} />Follow</>}
+        <button className={`btn btn-sm ${isFollowing || isRequested ? "btn-ghost" : "btn-primary"}`} onClick={toggleFollow} disabled={busy}>
+          {isFollowing ? <><UserCheck size={14} />Following</> : isRequested ? <><Clock size={14} />Requested</> : <><UserPlus size={14} />Follow</>}
         </button>
       </div>
     </div>
