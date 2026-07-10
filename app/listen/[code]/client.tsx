@@ -9,7 +9,6 @@ import { playChatDing } from "@/lib/chatSound";
 import ReactionOverlay from "@/components/ui/ReactionOverlay";
 import MemberList, { RoomMemberView } from "@/components/ui/MemberList";
 import RoomChatPanel, { ChatMessage } from "@/components/ui/RoomChatPanel";
-import HoverBridge from "@/components/ui/HoverBridge";
 import { Play, Pause, Radio, ArrowLeft, Users, MessageCircle } from "lucide-react";
 
 function fmt(s: number) { return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`; }
@@ -85,7 +84,14 @@ export default function ListenRoomClient() {
       .catch(() => {});
   }, [seriesId, episodeId]);
 
-  const sendRoomEvent = useCallback((type: string, payload?: Record<string, unknown>) => {
+  // `payload` is typed as `object` rather than `Record<string, unknown>`
+  // on purpose — plain interfaces like ChatMessage don't have an index
+  // signature, so TypeScript rejects passing them where an index
+  // signature is required. `object` accepts any object shape and still
+  // rules out passing a primitive by mistake. (This is what broke the
+  // Vercel build: `sendRoomEvent("chat-message", msg)` failed to
+  // type-check under the stricter `Record<string, unknown>` signature.)
+  const sendRoomEvent = useCallback((type: string, payload?: object) => {
     fetch(`/api/rooms/${code}/event`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -352,7 +358,6 @@ export default function ListenRoomClient() {
 
       <div style={{ width: "100%", maxWidth: 340, aspectRatio: "1", borderRadius: 20, overflow: "hidden", background: "var(--surface2)", marginBottom: 24, boxShadow: "0 20px 60px rgba(0,0,0,.4)", position: "relative" }}>
         {series.coverImage && <img src={series.coverImage} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
-        <HoverBridge audioEl={audioRef.current} playing={playing} barCount={16} />
 
         {roomEnded ? (
           <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.75)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center" }}>

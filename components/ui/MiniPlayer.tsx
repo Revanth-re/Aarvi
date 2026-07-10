@@ -14,7 +14,6 @@ import ReactionOverlay from "./ReactionOverlay";
 import Avatar from "./Avatar";
 import MemberList, { RoomMemberView } from "./MemberList";
 import RoomChatPanel, { ChatMessage } from "./RoomChatPanel";
-import HoverBridge from "./HoverBridge";
 
 function fmt(s: number) {
   const m = Math.floor(s / 60);
@@ -137,7 +136,12 @@ export default function MiniPlayer() {
   }, [showRoomModal, user]);
 
   // ─── Listen together: broadcast helper + heartbeat + reactions ───
-  const broadcastEvent = useCallback((type: string, payload?: Record<string, unknown>) => {
+  // `payload` is typed as `object` rather than `Record<string, unknown>`
+  // on purpose — plain interfaces like ChatMessage don't have an index
+  // signature, so TypeScript rejects passing them where an index
+  // signature is required. `object` accepts any object shape and still
+  // rules out passing a primitive by mistake.
+  const broadcastEvent = useCallback((type: string, payload?: object) => {
     if (!room) return;
     fetch(`/api/rooms/${room}/event`, {
       method: "POST",
@@ -563,7 +567,6 @@ export default function MiniPlayer() {
                   <div className="eq"><span style={{height:8}}/><span/><span/><span style={{height:10}}/></div>
                 </div>
               )}
-              <HoverBridge audioEl={ref.current} playing={playing} barCount={8} />
             </div>
             <div style={{ minWidth: 0 }}>
               <p style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ep.title}</p>
@@ -653,12 +656,10 @@ export default function MiniPlayer() {
               width: "100%", aspectRatio: "1", borderRadius: 20, overflow: "hidden",
               background: "var(--surface2)", marginBottom: 32,
               boxShadow: "0 20px 60px rgba(0,0,0,.5)",
-              position: "relative",
             }}>
               {series?.coverImage && (
                 <img src={series.coverImage} alt={ep.title} style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
               )}
-              <HoverBridge audioEl={ref.current} playing={playing} barCount={16} />
             </div>
 
             {/* Title & Series */}
