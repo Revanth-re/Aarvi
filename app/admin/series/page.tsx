@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Series } from "@/types";
 import { Plus, Edit2, Trash2, Star, Eye, EyeOff, TrendingUp, Search, X } from "lucide-react";
+import { adminFetch } from "@/lib/adminFetch";
 
 export default function AdminSeries() {
   const [data, setData]         = useState<Series[]>([]);
@@ -26,13 +27,13 @@ export default function AdminSeries() {
   const del = async (id: string, title: string) => {
     if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
     setDeleting(id);
-    await fetch(`/api/series/${id}`, { method: "DELETE" });
+    await adminFetch(`/api/series/${id}`, { method: "DELETE" });
     setData(d => d.filter(x => x._id !== id));
     setDeleting(null);
   };
 
   const toggle = async (s: Series, field: "isFeatured" | "isTrending") => {
-    await fetch(`/api/series/${s._id}`, {
+    await adminFetch(`/api/series/${s._id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ [field]: !s[field] }),

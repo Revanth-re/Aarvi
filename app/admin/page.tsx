@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Headphones, ShoppingBag, TrendingUp, BookOpen, Plus, Database, ArrowRight, Zap } from "lucide-react";
+import { adminFetch } from "@/lib/adminFetch";
 
 export default function AdminDashboard() {
   const [stats, setStats]     = useState({ series: 0, products: 0, episodes: 0, plays: 0 });
@@ -27,7 +28,7 @@ export default function AdminDashboard() {
 
   const seed = async () => {
     setSeeding(true);
-    const r = await fetch("/api/seed", { method: "POST" });
+    const r = await adminFetch("/api/seed", { method: "POST" });
     const d = await r.json();
     setToast(d.ok ? `✓ Seeded ${d.series} series + ${d.products} products` : "Error: " + d.error);
     setSeeding(false);

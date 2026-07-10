@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { ProductModel } from "@/models/Product";
+import { requireAdmin } from "@/lib/requireAdmin";
 
 export async function GET(req: NextRequest) {
   try {
@@ -20,6 +21,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
   try {
     await connectDB();
     const body = await req.json();

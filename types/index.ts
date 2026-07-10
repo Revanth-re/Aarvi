@@ -25,6 +25,14 @@ export interface Product {
   tags: string[]; isFeatured: boolean; createdAt: string;
 }
 export interface CartItem { product: Product; quantity: number; }
+
+export interface PlaylistItem {
+  seriesId: string; episodeId?: string; addedAt: string;
+}
+export interface Playlist {
+  _id: string; name: string; items: PlaylistItem[]; createdAt: string;
+}
 export interface User {
   _id: string; name?: string; email?: string; image?: string; createdAt: string;
+  favorites?: string[]; playlists?: Playlist[];
 }

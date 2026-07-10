@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Series, Episode } from "@/types";
 import { Plus, Trash2, ChevronDown, ChevronUp, Save, ArrowLeft } from "lucide-react";
 import FileUpload from "./FileUpload";
+import { adminFetch } from "@/lib/adminFetch";
 
 const GENRES = ["Thriller","Historical Adventure","Romance Drama","Sci-Fi","Folklore","Cyber Thriller","Comedy","Horror","Fantasy","True Crime","News","Education","Kids"];
 
@@ -49,7 +50,7 @@ export default function SeriesForm({ initial={}, isEdit=false }: Props) {
       const payload = { ...form, tags:form.tags.split(",").map(t=>t.trim()).filter(Boolean), episodes };
       const url = isEdit?`/api/series/${(initial as Series)._id}`:"/api/series";
       const method = isEdit?"PUT":"POST";
-      const r = await fetch(url,{method,headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+      const r = await adminFetch(url,{method,headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
       const d = await r.json();
       if(d.error){setErr(d.error);setSaving(false);return;}
       setMsg(isEdit?"Series updated!":"Series created!");
@@ -95,11 +96,11 @@ export default function SeriesForm({ initial={}, isEdit=false }: Props) {
             </div>
             {inp("Language","language","text","English")}
             {inp("Narrator","narrator","text","Narrator name")}
-            <FileUpload 
-              label="Cover Image *" 
-              type="image" 
-              currentUrl={form.coverImage} 
-              onUpload={(url) => set("coverImage", url)} 
+            <FileUpload
+              label="Cover Image *"
+              type="image"
+              currentUrl={form.coverImage}
+              onUpload={(url) => set("coverImage", url)}
             />
             {inp("Rating (0-5)","rating","number")}
             <div style={{gridColumn:"1/-1"}}>{inp("Tags (comma separated)","tags","text","thriller, mystery, dark")}</div>
@@ -153,11 +154,11 @@ export default function SeriesForm({ initial={}, isEdit=false }: Props) {
                       <label style={{display:"block",fontSize:12,fontWeight:500,color:"var(--muted)",marginBottom:6}}>Description</label>
                       <input className="inp" value={ep.description||""} onChange={e=>setEp(i,"description",e.target.value)} placeholder="Short description"/>
                     </div>
-                    <FileUpload 
-                      label="Audio File *" 
-                      type="audio" 
-                      currentUrl={ep.audioUrl} 
-                      onUpload={(url) => setEp(i, "audioUrl", url)} 
+                    <FileUpload
+                      label="Audio File *"
+                      type="audio"
+                      currentUrl={ep.audioUrl}
+                      onUpload={(url) => setEp(i, "audioUrl", url)}
                     />
                     <div>
                       <label style={{display:"block",fontSize:12,fontWeight:500,color:"var(--muted)",marginBottom:6}}>Duration (seconds)</label>

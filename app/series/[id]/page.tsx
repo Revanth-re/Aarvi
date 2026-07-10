@@ -1,21 +1,27 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Series, Episode } from "@/types";
 import { usePlayer, useApp } from "@/store";
-import { Play, Pause, Lock, Heart, Star, Clock, ArrowLeft, Mic, FileText, Globe, Users } from "lucide-react";
+import { Play, Pause, Lock, Heart, Star, Clock, ArrowLeft, Mic, FileText, Globe, Users, ListPlus } from "lucide-react";
 
 function fmt(s: number) { return `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,"0")}`; }
 
 export default function SeriesDetail() {
   const { id } = useParams() as { id: string };
+  const router = useRouter();
   const [series, setSeries] = useState<Series|null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"episodes"|"about"|"transcript">("episodes");
   const [activeEp, setActiveEp] = useState<Episode|null>(null);
   const { ep: curEp, playing, setEp, setPlaying } = usePlayer();
-  const { liked, toggleLike } = useApp();
+  const { liked, toggleLike, user, setUser } = useApp();
+
+  const [showPlaylistModal, setShowPlaylistModal] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState("");
+  const [addingTo, setAddingTo] = useState<string | null>(null);
+  const [toast, setToast] = useState("");
 
   useEffect(() => {
     if (!id) return;
@@ -30,8 +36,54 @@ export default function SeriesDetail() {
   );
   if (!series?._id) return <div style={{ textAlign: "center", padding: "100px 24px", color: "var(--text3)" }}>Series not found.</div>;
 
-  const isLiked = liked.includes(series._id);
+  // Logged-in users get favorites synced to their account (MongoDB); guests
+  // fall back to the old local-only `liked` list in the client store.
+  const isLiked = user ? (user.favorites || []).includes(series._id) : liked.includes(series._id);
   const firstFree = series.episodes?.find(e => !e.isLocked);
+
+  const flashToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 2000); };
+
+  const handleToggleLike = async () => {
+    if (!user) { toggleLike(series._id); return; }
+    try {
+      const res = await fetch(`/api/users/${user._id}/favorites`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seriesId: series._id }),
+      });
+      const data = await res.json();
+      if (data.favorites) setUser({ ...user, favorites: data.favorites });
+    } catch { flashToast("Couldn't update favorites — try again"); }
+  };
+
+  const addToPlaylist = async (playlistId?: string) => {
+    if (!user) return;
+    setAddingTo(playlistId || "new");
+    try {
+      if (playlistId) {
+        const res = await fetch(`/api/users/${user._id}/playlists/${playlistId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "add", seriesId: series._id }),
+        });
+        const data = await res.json();
+        if (data.playlists) setUser({ ...user, playlists: data.playlists });
+      } else {
+        if (!newPlaylistName.trim()) return;
+        const res = await fetch(`/api/users/${user._id}/playlists`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: newPlaylistName.trim(), seriesId: series._id }),
+        });
+        const data = await res.json();
+        if (data.playlists) setUser({ ...user, playlists: data.playlists });
+        setNewPlaylistName("");
+      }
+      flashToast("Added to playlist");
+      setShowPlaylistModal(false);
+    } catch { flashToast("Couldn't update playlist — try again"); }
+    finally { setAddingTo(null); }
+  };
 
   return (
     <div className="container-sm" style={{ paddingTop: 40, paddingBottom: 60 }}>
@@ -73,8 +125,11 @@ export default function SeriesDetail() {
                   <Play size={14} fill="currentColor"/>Play Episode 1
                 </button>
               )}
-              <button className="btn btn-ghost" onClick={() => toggleLike(series._id)} style={{ color: isLiked ? "var(--accent2)" : "var(--text2)" }}>
+              <button className="btn btn-ghost" onClick={handleToggleLike} style={{ color: isLiked ? "var(--accent2)" : "var(--text2)" }}>
                 <Heart size={14} fill={isLiked ? "currentColor" : "none"}/>{isLiked ? "Saved" : "Save"}
+              </button>
+              <button className="btn btn-ghost" onClick={() => user ? setShowPlaylistModal(true) : router.push("/login")}>
+                <ListPlus size={14}/>Playlist
               </button>
             </div>
           </div>
@@ -162,6 +217,49 @@ export default function SeriesDetail() {
               <p style={{ color: "var(--text3)", fontSize: 14 }}>Select an episode above to read its transcript.</p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Add to Playlist modal */}
+      {showPlaylistModal && (
+        <div
+          onClick={() => setShowPlaylistModal(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+        >
+          <div className="card" style={{ padding: 24, width: "100%", maxWidth: 380 }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 16 }}>Add to Playlist</h3>
+
+            {(user?.playlists?.length ?? 0) > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16, maxHeight: 200, overflowY: "auto" }}>
+                {user!.playlists!.map(p => (
+                  <button key={p._id} className="btn btn-ghost btn-sm" disabled={addingTo === p._id}
+                    onClick={() => addToPlaylist(p._id)}
+                    style={{ justifyContent: "space-between", width: "100%" }}>
+                    <span>{p.name}</span>
+                    <span style={{ color: "var(--text3)", fontSize: 12 }}>{p.items.length} item{p.items.length !== 1 ? "s" : ""}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                className="inp" placeholder="New playlist name"
+                value={newPlaylistName}
+                onChange={e => setNewPlaylistName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") addToPlaylist(); }}
+              />
+              <button className="btn btn-primary btn-sm" disabled={!newPlaylistName.trim() || addingTo === "new"} onClick={() => addToPlaylist()}>
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 18px", fontSize: 13, color: "var(--text)", boxShadow: "var(--shadow-lg)", zIndex: 600 }}>
+          {toast}
         </div>
       )}
     </div>

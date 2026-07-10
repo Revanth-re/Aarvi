@@ -1,9 +1,10 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { useApp } from "@/store";
-import { Radio, LayoutDashboard, Headphones, ShoppingBag, ExternalLink, Menu, X, ChevronRight } from "lucide-react";
+import { Radio, LayoutDashboard, Headphones, ShoppingBag, ExternalLink, Menu, X, ChevronRight, ShieldAlert } from "lucide-react";
+import { isAdminEmail } from "@/lib/admin";
 
 const NAV = [
   { href: "/admin",         label: "Dashboard",    icon: LayoutDashboard, exact: true },
@@ -12,8 +13,10 @@ const NAV = [
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const path  = usePathname();
-  const theme = useApp(s => s.theme);
+  const path   = usePathname();
+  const router = useRouter();
+  const theme  = useApp(s => s.theme);
+  const user   = useApp(s => s.user);
   const [open, setOpen]     = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -21,6 +24,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   // Close drawer on route change
   useEffect(() => { setOpen(false); }, [path]);
+
+  const admin = isAdminEmail(user?.email);
+
+  // Redirect non-admins away once we know who's logged in (client-side gate
+  // only — see lib/admin.ts for why this isn't a substitute for real auth).
+  useEffect(() => {
+    if (mounted && !admin) {
+      router.replace("/login?error=admin_only");
+    }
+  }, [mounted, admin, router]);
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? path === href : path.startsWith(href);
@@ -53,8 +66,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   );
 
   if (!mounted) return (
-    <div data-theme={theme} style={{ minHeight: "100vh", background: "var(--bg)" }}>
-      {children}
+    <div data-theme={theme} style={{ minHeight: "100vh", background: "var(--bg)" }} />
+  );
+
+  if (!admin) return (
+    <div data-theme={theme} style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: 24, textAlign: "center" }}>
+      <ShieldAlert size={32} color="var(--text3)" />
+      <p style={{ color: "var(--text3)", fontSize: 14 }}>Redirecting…</p>
     </div>
   );
 

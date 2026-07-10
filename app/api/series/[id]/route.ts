@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { SeriesModel } from "@/models/Series";
+import { requireAdmin } from "@/lib/requireAdmin";
 
 type P = { params: Promise<{ id: string }> };
 
@@ -15,6 +16,8 @@ export async function GET(_: NextRequest, { params }: P) {
 }
 
 export async function PUT(req: NextRequest, { params }: P) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
   try {
     await connectDB();
     const { id } = await params;
@@ -25,7 +28,9 @@ export async function PUT(req: NextRequest, { params }: P) {
   } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }
 }
 
-export async function DELETE(_: NextRequest, { params }: P) {
+export async function DELETE(req: NextRequest, { params }: P) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
   try {
     await connectDB();
     const { id } = await params;

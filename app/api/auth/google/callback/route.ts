@@ -1,15 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
-import mongoose from "mongoose";
-
-const UserSchema = new mongoose.Schema({
-  googleId:  { type: String, unique: true },
-  email:     { type: String },
-  name:      { type: String },
-  image:     { type: String },
-  createdAt: { type: Date, default: Date.now },
-});
-const UserModel = mongoose.models.User ?? mongoose.model("User", UserSchema);
+import { UserModel } from "@/models/User";
 
 export async function GET(request: NextRequest) {
   const baseUrl      = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3001";
@@ -59,11 +50,18 @@ export async function GET(request: NextRequest) {
     );
 
     const userData = encodeURIComponent(JSON.stringify({
-      _id:      user._id.toString(),
-      name:     user.name,
-      email:    user.email,
-      image:    user.image,
+      _id:       user._id.toString(),
+      name:      user.name,
+      email:     user.email,
+      image:     user.image,
       createdAt: user.createdAt,
+      favorites: user.favorites || [],
+      playlists: (user.playlists || []).map((p: { _id: { toString(): string }; name: string; items: unknown[]; createdAt: Date }) => ({
+        _id:       p._id.toString(),
+        name:      p.name,
+        items:     p.items || [],
+        createdAt: p.createdAt,
+      })),
     }));
 
     return NextResponse.redirect(`${baseUrl}/auth/callback?user=${userData}`);

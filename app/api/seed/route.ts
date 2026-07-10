@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { SeriesModel } from "@/models/Series";
 import { ProductModel } from "@/models/Product";
+import { requireAdmin } from "@/lib/requireAdmin";
 
 const series = [
   { title:"Shadows of the Forgotten",description:"A detective discovers her missing sister left behind cryptic audio messages leading to a secret society.",coverImage:"https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600",genre:"Thriller",language:"English",narrator:"Aria Voss",rating:4.8,isFeatured:true,isTrending:true,totalPlays:128450,tags:["thriller","mystery","dark"],
@@ -64,7 +65,9 @@ const products = [
   {name:"The Quantum Diaries — Collector's Box",description:"Deluxe collector's edition with printed transcript book, props, and a limited print.",price:2999,images:["https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=600"],category:"merchandise",relatedSeries:"The Quantum Diaries",tags:["collectible","box set","limited"],stock:100,rating:4.9,reviews:67},
 ];
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
   try {
     await connectDB();
     await SeriesModel.deleteMany({});

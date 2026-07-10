@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Save, Loader2, Plus, X, Star } from "lucide-react";
 import FileUpload from "./FileUpload";
+import { adminFetch } from "@/lib/adminFetch";
 
 interface Product {
   _id?: string;
@@ -53,7 +54,7 @@ export default function ProductForm({ initial, isEdit }: Props) {
     try {
       const url    = isEdit ? `/api/products/${initial!._id}` : "/api/products";
       const method = isEdit ? "PUT" : "POST";
-      const res    = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      const res    = await adminFetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
       if (!res.ok) { const d = await res.json(); setError(d.error ?? "Something went wrong."); setSaving(false); return; }
       router.push("/admin/products");
       router.refresh();

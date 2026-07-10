@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Product } from "@/types";
 import { Plus, Edit2, Trash2, Star, Search, X } from "lucide-react";
+import { adminFetch } from "@/lib/adminFetch";
 
 const CATS = ["all", "accessories", "clothing", "handicrafts", "merchandise"];
 
@@ -30,7 +31,7 @@ export default function AdminProducts() {
   const del = async (id: string, name: string) => {
     if (!confirm(`Delete "${name}"?`)) return;
     setDeleting(id);
-    await fetch(`/api/products/${id}`, { method: "DELETE" });
+    await adminFetch(`/api/products/${id}`, { method: "DELETE" });
     setData(d => d.filter(x => x._id !== id));
     setDeleting(null);
   };

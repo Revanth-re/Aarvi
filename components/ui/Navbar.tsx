@@ -3,8 +3,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { useCart, useApp } from "@/store";
-import { ShoppingBag, Radio, Menu, X, Shield, Sun, Moon, LogIn, LogOut, User } from "lucide-react";
+import { ShoppingBag, Radio, Menu, X, Shield, Sun, Moon, LogIn, LogOut, UserCircle } from "lucide-react";
 import { Theme } from "@/types";
+import { isAdminEmail } from "@/lib/admin";
 
 const THEMES = [
   { id:"midnight", label:"Midnight", dot:"#7c6af7", dark:"midnight-dark" as Theme, light:"midnight-light" as Theme },
@@ -25,6 +26,7 @@ export default function Navbar() {
   const { theme, setTheme, user, setUser } = useApp();
   const [open,      setOpen]      = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
+  const admin = isAdminEmail(user?.email);
 
   if (path.startsWith("/admin")) return null;
 
@@ -117,12 +119,17 @@ export default function Navbar() {
 
             {/* User / Login */}
             {user ? (
-              <button onClick={logout} className="hide-mobile"
-                style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", borderRadius:8, border:"1px solid var(--border2)", background:"var(--surface2)", cursor:"pointer", color:"var(--text2)", fontSize:13 }}>
-                {user.image ? <img src={user.image} style={{ width:22, height:22, borderRadius:"50%" }} alt=""/> : <User size={15}/>}
-                <span style={{ maxWidth:72, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.name?.split(" ")[0]}</span>
-                <LogOut size={12}/>
-              </button>
+              <>
+                <Link href="/profile" className="hide-mobile" title="Profile"
+                  style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", borderRadius:8, border:"1px solid var(--border2)", background:"var(--surface2)", color:"var(--text2)", fontSize:13, textDecoration:"none" }}>
+                  {user.image ? <img src={user.image} style={{ width:22, height:22, borderRadius:"50%" }} alt=""/> : <UserCircle size={15}/>}
+                  <span style={{ maxWidth:72, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.name?.split(" ")[0]}</span>
+                </Link>
+                <button onClick={logout} className="hide-mobile" title="Log out"
+                  style={{ display:"flex", alignItems:"center", justifyContent:"center", width:34, height:34, borderRadius:8, border:"1px solid var(--border2)", background:"var(--surface2)", cursor:"pointer", color:"var(--text2)" }}>
+                  <LogOut size={14}/>
+                </button>
+              </>
             ) : (
               <Link href="/login" className="hide-mobile"
                 style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 14px", borderRadius:8, background:"var(--accent)", color:"#fff", textDecoration:"none", fontSize:13, fontWeight:600 }}>
@@ -130,11 +137,13 @@ export default function Navbar() {
               </Link>
             )}
 
-            {/* Admin */}
-            <Link href="/admin" className="hide-mobile"
-              style={{ display:"flex", alignItems:"center", justifyContent:"center", width:34, height:34, borderRadius:8, border:"1px solid var(--border2)", background:"var(--surface2)", textDecoration:"none" }}>
-              <Shield size={15} color="var(--text3)"/>
-            </Link>
+            {/* Admin — only visible to allow-listed admin emails */}
+            {admin && (
+              <Link href="/admin" className="hide-mobile" title="Admin panel"
+                style={{ display:"flex", alignItems:"center", justifyContent:"center", width:34, height:34, borderRadius:8, border:"1px solid var(--border2)", background:"var(--surface2)", textDecoration:"none" }}>
+                <Shield size={15} color="var(--text3)"/>
+              </Link>
+            )}
 
             {/* Cart */}
             <Link href="/cart" style={{ position:"relative", display:"flex", padding:8, borderRadius:8, textDecoration:"none" }}>
@@ -184,10 +193,16 @@ export default function Navbar() {
                   {isDark ? <><Sun size={14} color="#fbbf24"/> Light mode</> : <><Moon size={14}/> Dark mode</>}
                 </button>
                 {user ? (
-                  <button onClick={() => { logout(); setOpen(false); }}
-                    style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px", borderRadius:8, border:"1px solid var(--border2)", background:"var(--surface)", cursor:"pointer", fontSize:13, color:"var(--text2)", fontFamily:"var(--ff-sans)" }}>
-                    <LogOut size={14}/> Logout
-                  </button>
+                  <>
+                    <Link href="/profile" onClick={() => setOpen(false)}
+                      style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px", borderRadius:8, border:"1px solid var(--border2)", background:"var(--surface)", cursor:"pointer", fontSize:13, color:"var(--text2)", fontFamily:"var(--ff-sans)", textDecoration:"none" }}>
+                      <UserCircle size={14}/> Profile
+                    </Link>
+                    <button onClick={() => { logout(); setOpen(false); }}
+                      style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px", borderRadius:8, border:"1px solid var(--border2)", background:"var(--surface)", cursor:"pointer", fontSize:13, color:"var(--text2)", fontFamily:"var(--ff-sans)" }}>
+                      <LogOut size={14}/> Logout
+                    </button>
+                  </>
                 ) : (
                   <Link href="/login" onClick={() => setOpen(false)}
                     style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px", borderRadius:8, background:"var(--accent)", color:"#fff", textDecoration:"none", fontSize:13, fontWeight:600 }}>

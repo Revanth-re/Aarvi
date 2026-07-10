@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef } from "react";
 import { Upload, X, Loader2, FileAudio, ImageIcon, Plus } from "lucide-react";
+import { adminFetch } from "@/lib/adminFetch";
 
 interface Props {
   onUpload: (url: string) => void;
@@ -36,7 +37,7 @@ export default function FileUpload({ onUpload, type, currentUrl, label, compact 
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("/api/upload", {
+      const res = await adminFetch("/api/upload", {
         method: "POST",
         body: formData,
       });
@@ -58,7 +59,7 @@ export default function FileUpload({ onUpload, type, currentUrl, label, compact 
   return (
     <div style={{ marginBottom: 16 }}>
       {label && <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "var(--muted)", marginBottom: 6 }}>{label}</label>}
-      
+
       <div style={{
         position: "relative",
         border: "2px dashed var(--border)",
@@ -76,10 +77,10 @@ export default function FileUpload({ onUpload, type, currentUrl, label, compact 
           </div>
         ) : currentUrl ? (
           <div style={{ display: "flex", alignItems: "center", gap: 12, textAlign: "left", height: compact ? "100%" : "auto" }}>
-            <div style={{ 
-              width: compact ? "100%" : 48, height: compact ? "100%" : 48, 
-              borderRadius: 8, background: "var(--bg)", 
-              display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" 
+            <div style={{
+              width: compact ? "100%" : 48, height: compact ? "100%" : 48,
+              borderRadius: 8, background: "var(--bg)",
+              display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden"
             }}>
               {type === "image" ? (
                 <img src={currentUrl} alt="preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -92,7 +93,7 @@ export default function FileUpload({ onUpload, type, currentUrl, label, compact 
                 <p style={{ fontSize: 12, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {currentUrl.split("/").pop()}
                 </p>
-                <button 
+                <button
                   onClick={(e) => { e.preventDefault(); onUpload(""); }}
                   style={{ fontSize: 11, color: "var(--danger)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
                 >
@@ -102,7 +103,7 @@ export default function FileUpload({ onUpload, type, currentUrl, label, compact 
             )}
           </div>
         ) : (
-          <div 
+          <div
             onClick={() => inputRef.current?.click()}
             style={{ cursor: "pointer", padding: compact ? "4px 0" : "12px 0", height: "100%", display: "flex", flexDirection: "column", justifyContent: "center" }}
           >
@@ -121,10 +122,10 @@ export default function FileUpload({ onUpload, type, currentUrl, label, compact 
             )}
           </div>
         )}
-        
-        <input 
+
+        <input
           ref={inputRef}
-          type="file" 
+          type="file"
           accept={type === "image" ? "image/*" : "audio/*"}
           onChange={handleFile}
           hidden
