@@ -46,6 +46,11 @@ async function uploadToGemini(buf: Buffer, mimeType: string, apiKey: string): Pr
   const uploadUrl = startRes.headers.get("x-goog-upload-url");
   if (!uploadUrl) throw new Error("Gemini upload init didn't return an upload URL");
 
+  // `fetch`'s BodyInit type doesn't structurally accept Node's `Buffer`
+  // directly (the installed @types/node's `Buffer<ArrayBufferLike>`
+  // generic doesn't line up with the plain ArrayBufferView the DOM
+  // fetch types expect) — wrapping in a plain Uint8Array satisfies it
+  // without copying the underlying bytes.
   const uploadRes = await fetch(uploadUrl, {
     method: "POST",
     headers: {
@@ -53,7 +58,7 @@ async function uploadToGemini(buf: Buffer, mimeType: string, apiKey: string): Pr
       "X-Goog-Upload-Offset": "0",
       "X-Goog-Upload-Command": "upload, finalize",
     },
-    body: buf,
+    body: new Uint8Array(buf),
   });
   if (!uploadRes.ok) throw new Error(`Gemini upload failed: ${uploadRes.status} ${await uploadRes.text()}`);
   const data = await uploadRes.json();
