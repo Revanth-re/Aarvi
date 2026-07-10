@@ -34,5 +34,10 @@ export interface Playlist {
 }
 export interface User {
   _id: string; name?: string; email?: string; image?: string; createdAt: string;
-  favorites?: string[]; playlists?: Playlist[];
+  favorites?: string[]; playlists?: Playlist[]; following?: string[];
+}
+
+export interface FriendProgress {
+  userId: string; name?: string; image?: string;
+  episodeId?: string; position: number; updatedAt: string;
 }

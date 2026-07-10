@@ -2,13 +2,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useApp } from "@/store";
+import { useApp, useToast } from "@/store";
 import { Series } from "@/types";
-import { UserCircle, Heart, ListMusic, Trash2, Plus, ChevronDown, ChevronUp, X, Calendar, Mail } from "lucide-react";
+import { Heart, ListMusic, Trash2, Plus, ChevronDown, ChevronUp, X, Calendar, Mail, Link2, Users } from "lucide-react";
+import Avatar from "@/components/ui/Avatar";
+
+interface FollowedProfile { _id: string; name: string; image: string; }
 
 export default function ProfilePage() {
   const router = useRouter();
   const { user, setUser } = useApp();
+  const showToast = useToast(s => s.show);
   const [mounted, setMounted] = useState(false);
   const [seriesList, setSeriesList] = useState<Series[]>([]);
   const [loading, setLoading] = useState(true);
@@ -16,7 +20,7 @@ export default function ProfilePage() {
   const [creating, setCreating] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [toast, setToast] = useState("");
+  const [followingProfiles, setFollowingProfiles] = useState<FollowedProfile[]>([]);
 
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => { if (mounted && !user) router.replace("/login"); }, [mounted, user, router]);
@@ -28,12 +32,18 @@ export default function ProfilePage() {
       .catch(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    const ids = user?.following || [];
+    if (ids.length === 0) { setFollowingProfiles([]); return; }
+    Promise.all(
+      ids.map(id => fetch(`/api/users/${id}`).then(r => r.json()).catch(() => null))
+    ).then(results => setFollowingProfiles(results.filter(r => r && !r.error)));
+  }, [user?.following]);
+
   const seriesMap = useMemo(
     () => Object.fromEntries(seriesList.map(s => [s._id, s])),
     [seriesList]
   );
-
-  const flashToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 2200); };
 
   if (!mounted || !user) {
     return <div className="container-sm" style={{ paddingTop: 60 }}><div className="skeleton" style={{ height: 120, borderRadius: 16 }} /></div>;
@@ -41,6 +51,14 @@ export default function ProfilePage() {
 
   const favorites = (user.favorites || []).map(id => seriesMap[id]).filter(Boolean) as Series[];
   const playlists = user.playlists || [];
+
+  const copyProfileLink = async () => {
+    const link = `${window.location.origin}/u/${user._id}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      showToast("Profile link copied", "success");
+    } catch { showToast("Couldn't copy link", "error"); }
+  };
 
   const removeFavorite = async (seriesId: string) => {
     setBusy(`fav-${seriesId}`);
@@ -51,8 +69,10 @@ export default function ProfilePage() {
         body: JSON.stringify({ seriesId }),
       });
       const data = await res.json();
-      if (data.favorites) setUser({ ...user, favorites: data.favorites });
-    } catch { flashToast("Couldn't update favorites"); }
+      if (!res.ok || data.error) { showToast(data.error || "Couldn't update favorites", "error"); return; }
+      setUser({ ...user, favorites: data.favorites });
+      showToast("Removed from favorites", "success");
+    } catch { showToast("Network error — couldn't update favorites", "error"); }
     finally { setBusy(null); }
   };
 
@@ -66,21 +86,24 @@ export default function ProfilePage() {
         body: JSON.stringify({ name: newPlaylistName.trim() }),
       });
       const data = await res.json();
-      if (data.playlists) setUser({ ...user, playlists: data.playlists });
+      if (!res.ok || data.error) { showToast(data.error || "Couldn't create playlist", "error"); return; }
+      setUser({ ...user, playlists: data.playlists });
       setNewPlaylistName("");
-      flashToast("Playlist created");
-    } catch { flashToast("Couldn't create playlist"); }
+      showToast("Playlist created", "success");
+    } catch { showToast("Network error — couldn't create playlist", "error"); }
     finally { setCreating(false); }
   };
 
   const deletePlaylist = async (playlistId: string, name: string) => {
-    if (!confirm(`Delete playlist "${name}"?`)) return;
+    if (!confirm(`Delete playlist "${name}"? This cannot be undone.`)) return;
     setBusy(`del-${playlistId}`);
     try {
       const res = await fetch(`/api/users/${user._id}/playlists/${playlistId}`, { method: "DELETE" });
       const data = await res.json();
-      if (data.playlists) setUser({ ...user, playlists: data.playlists });
-    } catch { flashToast("Couldn't delete playlist"); }
+      if (!res.ok || data.error) { showToast(data.error || "Couldn't delete playlist", "error"); return; }
+      setUser({ ...user, playlists: data.playlists });
+      showToast(`Playlist "${name}" deleted`, "success");
+    } catch { showToast("Network error — couldn't delete playlist", "error"); }
     finally { setBusy(null); }
   };
 
@@ -93,8 +116,10 @@ export default function ProfilePage() {
         body: JSON.stringify({ action: "remove", seriesId, episodeId }),
       });
       const data = await res.json();
-      if (data.playlists) setUser({ ...user, playlists: data.playlists });
-    } catch { flashToast("Couldn't update playlist"); }
+      if (!res.ok || data.error) { showToast(data.error || "Couldn't update playlist", "error"); return; }
+      setUser({ ...user, playlists: data.playlists });
+      showToast("Removed from playlist", "success");
+    } catch { showToast("Network error — couldn't update playlist", "error"); }
     finally { setBusy(null); }
   };
 
@@ -103,19 +128,40 @@ export default function ProfilePage() {
 
       {/* Profile header */}
       <div className="card" style={{ padding: 24, marginBottom: 28, display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
-        {user.image
-          ? <img src={user.image} alt="" style={{ width: 68, height: 68, borderRadius: "50%", flexShrink: 0 }} />
-          : <div style={{ width: 68, height: 68, borderRadius: "50%", background: "var(--surface2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <UserCircle size={36} color="var(--text3)" />
-            </div>
-        }
-        <div style={{ minWidth: 200 }}>
+        <Avatar name={user.name} image={user.image} size={68} />
+        <div style={{ minWidth: 200, flex: 1 }}>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>{user.name || "Listener"}</h1>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 14, fontSize: 13, color: "var(--text3)" }}>
             {user.email && <span style={{ display: "flex", alignItems: "center", gap: 5 }}><Mail size={13} />{user.email}</span>}
             {user.createdAt && <span style={{ display: "flex", alignItems: "center", gap: 5 }}><Calendar size={13} />Joined {new Date(user.createdAt).toLocaleDateString(undefined, { month: "long", year: "numeric" })}</span>}
           </div>
         </div>
+        <button className="btn btn-ghost btn-sm" onClick={copyProfileLink} title="Share your profile so friends can follow you">
+          <Link2 size={13} />Copy profile link
+        </button>
+      </div>
+
+      {/* Following */}
+      <div style={{ marginBottom: 32 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+          <Users size={16} color="var(--accent)" />
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>Following</h2>
+          <span style={{ fontSize: 12, color: "var(--text3)" }}>{followingProfiles.length}</span>
+        </div>
+        {followingProfiles.length === 0 ? (
+          <div className="card" style={{ padding: "20px", textAlign: "center" }}>
+            <p style={{ color: "var(--text3)", fontSize: 13 }}>Not following anyone yet. Share your profile link with friends, or follow theirs, to see where they've left off on shared series.</p>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            {followingProfiles.map(f => (
+              <Link key={f._id} href={`/u/${f._id}`} className="card" style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", textDecoration: "none" }}>
+                <Avatar name={f.name} image={f.image} size={22} />
+                <span style={{ fontSize: 13, color: "var(--text2)" }}>{f.name}</span>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Favorites */}
@@ -175,7 +221,7 @@ export default function ProfilePage() {
             onKeyDown={e => { if (e.key === "Enter") createPlaylist(); }}
           />
           <button className="btn btn-primary btn-sm" onClick={createPlaylist} disabled={creating || !newPlaylistName.trim()}>
-            <Plus size={13} />Create
+            <Plus size={13} />{creating ? "Creating…" : "Create"}
           </button>
         </div>
 
@@ -239,12 +285,6 @@ export default function ProfilePage() {
           </div>
         )}
       </div>
-
-      {toast && (
-        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 18px", fontSize: 13, color: "var(--text)", boxShadow: "var(--shadow-lg)", zIndex: 600 }}>
-          {toast}
-        </div>
-      )}
     </div>
   );
 }

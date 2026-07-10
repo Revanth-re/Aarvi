@@ -1,11 +1,15 @@
 "use client";
 import { useRef, useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { usePlayer } from "@/store";
+import { usePathname } from "next/navigation";
+import { usePlayer, useApp, useToast } from "@/store";
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, X,
-  ChevronUp, ChevronDown, RotateCcw, RotateCw, Moon, Timer
+  ChevronUp, ChevronDown, RotateCcw, RotateCw, Moon, Heart,
+  Users, Copy, Share2
 } from "lucide-react";
+import { getPusherClient } from "@/lib/pusherClient";
+import ReactionOverlay from "./ReactionOverlay";
 
 function fmt(s: number) {
   const m = Math.floor(s / 60);
@@ -22,18 +26,45 @@ const SLEEP_OPTIONS = [
   { label: "45 min", value: 45 },
   { label: "60 min", value: 60 },
 ];
+const REACTIONS = ["❤️", "😂", "😮", "🔥", "👏"];
+
+// How often (ms) we quietly save playback position to the server so
+// followers can see "X is on Episode N" on the series page.
+const PROGRESS_SYNC_INTERVAL = 12000;
+// How often (ms) the host re-broadcasts position to a listen-together
+// room, so anyone who joins mid-episode catches up.
+const ROOM_HEARTBEAT_INTERVAL = 4000;
+
+function genRoomCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no ambiguous chars
+  let code = "";
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
 
 export default function MiniPlayer() {
+  const path = usePathname();
   const { ep, series, playing, progress, duration, volume, rate, setPlaying, setProgress, setDuration, setVolume, setRate, next, prev } = usePlayer();
+  const { liked, toggleLike, user, setUser } = useApp();
+  const showToast = useToast(s => s.show);
   const ref = useRef<HTMLAudioElement>(null);
   const [muted, setMuted] = useState(false);
   const [rIdx, setRIdx] = useState(1);
   const [dismissed, setDismissed] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [likeBusy, setLikeBusy] = useState(false);
   const [sleepMinutes, setSleepMinutes] = useState(0);
   const [sleepRemaining, setSleepRemaining] = useState(0);
   const [showSleepPicker, setShowSleepPicker] = useState(false);
   const sleepRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const progressRef = useRef(progress);
+
+  // ─── Listen together (room) state ───
+  const [room, setRoom] = useState<string | null>(null);
+  const [showRoomModal, setShowRoomModal] = useState(false);
+  const [reactions, setReactions] = useState<{ id: number; emoji: string }[]>([]);
+
+  useEffect(() => { progressRef.current = progress; }, [progress]);
 
   useEffect(() => { if (ep) setDismissed(false); }, [ep?._id]);
   useEffect(() => { if (!ref.current || !ep) return; ref.current.src = ep.audioUrl; ref.current.load(); if (playing) ref.current.play().catch(() => {}); }, [ep?._id]);
@@ -41,11 +72,94 @@ export default function MiniPlayer() {
   useEffect(() => { if (ref.current) ref.current.volume = muted ? 0 : volume; }, [volume, muted]);
   useEffect(() => { if (ref.current) (ref.current as any).playbackRate = rate; }, [rate]);
 
+  // Periodically save playback position for logged-in users, so
+  // followers can see where they've gotten to on a shared series.
+  useEffect(() => {
+    if (!ep || !series || !user || !playing) return;
+    const saveProgress = () => {
+      fetch(`/api/users/${user._id}/progress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seriesId: series._id, episodeId: ep._id, position: progressRef.current }),
+      }).catch(() => {});
+    };
+    const iv = setInterval(saveProgress, PROGRESS_SYNC_INTERVAL);
+    return () => { clearInterval(iv); saveProgress(); };
+  }, [ep?._id, series?._id, user?._id, playing]);
+
+  // ─── Listen together: broadcast helper + heartbeat + reactions ───
+  const broadcastEvent = useCallback((type: string, payload?: Record<string, unknown>) => {
+    if (!room) return;
+    fetch(`/api/rooms/${room}/event`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, payload: payload || {} }),
+    }).catch(() => {});
+  }, [room]);
+
+  useEffect(() => {
+    if (!room || !playing) return;
+    const iv = setInterval(() => {
+      broadcastEvent("heartbeat", { position: progressRef.current, playing: true });
+    }, ROOM_HEARTBEAT_INTERVAL);
+    return () => clearInterval(iv);
+  }, [room, playing, broadcastEvent]);
+
+  useEffect(() => {
+    return () => { if (room) getPusherClient().unsubscribe(`room-${room}`); };
+  }, [room]);
+
+  useEffect(() => {
+    if (reactions.length === 0) return;
+    const t = setTimeout(() => setReactions(rs => rs.slice(1)), 2200);
+    return () => clearTimeout(t);
+  }, [reactions]);
+
+  const startRoom = () => {
+    if (!series || !ep) return;
+    const code = genRoomCode();
+    const pusher = getPusherClient();
+    const channel = pusher.subscribe(`room-${code}`);
+    channel.bind("reaction", (data: { emoji: string }) => {
+      setReactions(rs => [...rs, { id: Date.now() + Math.random(), emoji: data.emoji }]);
+    });
+    setRoom(code);
+    setShowRoomModal(true);
+  };
+
+  const stopRoom = () => {
+    if (room) getPusherClient().unsubscribe(`room-${room}`);
+    setRoom(null);
+    setShowRoomModal(false);
+    showToast("Listen together session ended", "info");
+  };
+
+  const roomLink = () => `${window.location.origin}/listen/${room}?seriesId=${series?._id}&episodeId=${ep?._id}`;
+
+  const copyRoomLink = async () => {
+    try { await navigator.clipboard.writeText(roomLink()); showToast("Link copied", "success"); }
+    catch { showToast("Couldn't copy link", "error"); }
+  };
+
+  const shareRoomLink = async () => {
+    const link = roomLink();
+    if (navigator.share) {
+      try { await navigator.share({ title: "Listen together on Aarvi", url: link }); } catch {}
+    } else {
+      copyRoomLink();
+    }
+  };
+
   // Sleep timer logic
   const startSleep = useCallback((mins: number) => {
     if (sleepRef.current) clearInterval(sleepRef.current);
     setSleepMinutes(mins);
-    if (mins === 0) { setSleepRemaining(0); return; }
+    if (mins === 0) {
+      setSleepRemaining(0);
+      showToast("Sleep timer off", "info");
+      return;
+    }
+    showToast(`Sleep timer set for ${mins} min`, "success");
     const totalSec = mins * 60;
     setSleepRemaining(totalSec);
     const start = Date.now();
@@ -56,12 +170,13 @@ export default function MiniPlayer() {
         setSleepRemaining(0);
         setSleepMinutes(0);
         setPlaying(false);
+        showToast("Sleep timer ended — playback paused", "info");
         if (sleepRef.current) clearInterval(sleepRef.current);
       } else {
         setSleepRemaining(rem);
       }
     }, 1000);
-  }, [setPlaying]);
+  }, [setPlaying, showToast]);
 
   useEffect(() => { return () => { if (sleepRef.current) clearInterval(sleepRef.current); }; }, []);
 
@@ -73,15 +188,72 @@ export default function MiniPlayer() {
     return () => window.removeEventListener("keydown", handler);
   }, [expanded]);
 
+  const togglePlaying = () => {
+    const np = !playing;
+    setPlaying(np);
+    broadcastEvent(np ? "play" : "pause", { position: progressRef.current });
+  };
+
+  const seekTo = (t: number) => {
+    setProgress(t);
+    if (ref.current) ref.current.currentTime = t;
+    broadcastEvent("seek", { position: t });
+  };
+
   const skip = (secs: number) => {
     if (!ref.current) return;
     const t = Math.min(Math.max(ref.current.currentTime + secs, 0), duration);
     ref.current.currentTime = t;
     setProgress(t);
+    broadcastEvent("seek", { position: t });
   };
 
-  if (!ep || dismissed) return null;
+  const handleNext = () => {
+    next();
+    if (room) {
+      const state = usePlayer.getState();
+      if (state.ep) broadcastEvent("episode-change", { episodeId: state.ep._id, position: 0 });
+    }
+  };
+
+  const handlePrev = () => {
+    prev();
+    if (room) {
+      const state = usePlayer.getState();
+      if (state.ep) broadcastEvent("episode-change", { episodeId: state.ep._id, position: 0 });
+    }
+  };
+
+  const sendReaction = (emoji: string) => {
+    broadcastEvent("reaction", { emoji });
+  };
+
+  // Hidden entirely inside admin, and inside a listen-together session
+  // (that page has its own dedicated, host-controlled mini-player).
+  const hiddenRoute = path.startsWith("/admin") || path.startsWith("/listen");
+
+  if (hiddenRoute || !ep || dismissed) return <ReactionOverlay reactions={reactions} />;
   const pct = duration > 0 ? (progress / duration) * 100 : 0;
+
+  const isLiked = series ? (user ? (user.favorites || []).includes(series._id) : liked.includes(series._id)) : false;
+
+  const handleToggleLike = async () => {
+    if (!series) return;
+    if (!user) { toggleLike(series._id); showToast(isLiked ? "Removed from favorites" : "Saved to favorites", "success"); return; }
+    setLikeBusy(true);
+    try {
+      const res = await fetch(`/api/users/${user._id}/favorites`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seriesId: series._id }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) { showToast(data.error || "Couldn't update favorites", "error"); return; }
+      setUser({ ...user, favorites: data.favorites });
+      showToast(data.favorites.includes(series._id) ? "Saved to favorites" : "Removed from favorites", "success");
+    } catch { showToast("Network error — couldn't update favorites", "error"); }
+    finally { setLikeBusy(false); }
+  };
 
   return (
     <>
@@ -90,15 +262,24 @@ export default function MiniPlayer() {
         onLoadedMetadata={() => ref.current && setDuration(ref.current.duration)}
         onEnded={next} preload="metadata"/>
 
+      <ReactionOverlay reactions={reactions} />
+
       {/* ─── MINI BAR ─── */}
       <div style={{
         position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100,
         background: "var(--surface)", borderTop: "1px solid var(--border2)",
         boxShadow: "0 -4px 30px rgba(0,0,0,.3)",
       }}>
+        {room && (
+          <div style={{ position: "absolute", top: -28, left: 12, background: "var(--accent)", color: "#fff", fontSize: 10, fontWeight: 600, padding: "3px 9px", borderRadius: 6, display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}
+            onClick={() => setShowRoomModal(true)}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff" }}/> LIVE · {room}
+          </div>
+        )}
+
         {/* Progress track */}
         <div style={{ height: 2, background: "var(--border)", cursor: "pointer", position: "relative" }}
-          onClick={e => { const r = e.currentTarget.getBoundingClientRect(); const t = ((e.clientX - r.left) / r.width) * duration; setProgress(t); if (ref.current) ref.current.currentTime = t; }}>
+          onClick={e => { const r = e.currentTarget.getBoundingClientRect(); seekTo(((e.clientX - r.left) / r.width) * duration); }}>
           <div style={{ height: "100%", background: "linear-gradient(90deg,var(--accent),var(--accent2))", width: `${pct}%`, transition: "width .15s" }}/>
         </div>
 
@@ -119,13 +300,19 @@ export default function MiniPlayer() {
             </div>
           </div>
 
+          {/* Like */}
+          <button onClick={handleToggleLike} disabled={likeBusy} title={isLiked ? "Remove from favorites" : "Save to favorites"}
+            style={{ background: "none", border: "none", cursor: "pointer", color: isLiked ? "var(--accent2)" : "var(--text3)", padding: 8, display: "flex", borderRadius: 8, flexShrink: 0 }}>
+            <Heart size={17} fill={isLiked ? "currentColor" : "none"}/>
+          </button>
+
           {/* Controls */}
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <button onClick={prev} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text3)", padding: 8, display: "flex", borderRadius: 8 }}><SkipBack size={17}/></button>
-            <button onClick={() => setPlaying(!playing)} style={{ width: 40, height: 40, borderRadius: "50%", background: "var(--accent)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 0 16px var(--accent)44" }}>
+            <button onClick={handlePrev} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text3)", padding: 8, display: "flex", borderRadius: 8 }}><SkipBack size={17}/></button>
+            <button onClick={togglePlaying} style={{ width: 40, height: 40, borderRadius: "50%", background: "var(--accent)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 0 16px var(--accent)44" }}>
               {playing ? <Pause size={16} color="#fff" fill="#fff"/> : <Play size={16} color="#fff" fill="#fff" style={{ marginLeft: 2 }}/>}
             </button>
-            <button onClick={next} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text3)", padding: 8, display: "flex", borderRadius: 8 }}><SkipForward size={17}/></button>
+            <button onClick={handleNext} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text3)", padding: 8, display: "flex", borderRadius: 8 }}><SkipForward size={17}/></button>
           </div>
 
           {/* Time */}
@@ -182,7 +369,10 @@ export default function MiniPlayer() {
             <p style={{ fontSize: 12, fontWeight: 600, color: "var(--text3)", textTransform: "uppercase", letterSpacing: 1.2 }}>
               Now Playing
             </p>
-            <div style={{ width: 32 }}/>
+            <button onClick={handleToggleLike} disabled={likeBusy} title={isLiked ? "Remove from favorites" : "Save to favorites"}
+              style={{ background: "none", border: "none", cursor: "pointer", color: isLiked ? "var(--accent2)" : "var(--text3)", display: "flex", padding: 4 }}>
+              <Heart size={22} fill={isLiked ? "currentColor" : "none"}/>
+            </button>
           </div>
 
           {/* Content */}
@@ -211,9 +401,7 @@ export default function MiniPlayer() {
               <div style={{ position: "relative", height: 6, borderRadius: 3, background: "var(--surface2)", cursor: "pointer" }}
                 onClick={e => {
                   const r = e.currentTarget.getBoundingClientRect();
-                  const t = ((e.clientX - r.left) / r.width) * duration;
-                  setProgress(t);
-                  if (ref.current) ref.current.currentTime = t;
+                  seekTo(((e.clientX - r.left) / r.width) * duration);
                 }}>
                 <div style={{
                   height: "100%", borderRadius: 3,
@@ -242,12 +430,12 @@ export default function MiniPlayer() {
               </button>
 
               {/* Prev */}
-              <button onClick={prev} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text)", display: "flex", padding: 4 }}>
+              <button onClick={handlePrev} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text)", display: "flex", padding: 4 }}>
                 <SkipBack size={28} fill="var(--text)"/>
               </button>
 
               {/* Play/Pause */}
-              <button onClick={() => setPlaying(!playing)} style={{
+              <button onClick={togglePlaying} style={{
                 width: 64, height: 64, borderRadius: "50%",
                 background: "linear-gradient(135deg, var(--accent), var(--accent2))",
                 border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
@@ -258,7 +446,7 @@ export default function MiniPlayer() {
               </button>
 
               {/* Next */}
-              <button onClick={next} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text)", display: "flex", padding: 4 }}>
+              <button onClick={handleNext} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text)", display: "flex", padding: 4 }}>
                 <SkipForward size={28} fill="var(--text)"/>
               </button>
 
@@ -275,6 +463,26 @@ export default function MiniPlayer() {
               padding: "16px 0", borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)",
               marginBottom: 24,
             }}>
+              {/* Like */}
+              <button
+                onClick={handleToggleLike}
+                disabled={likeBusy}
+                style={{
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+                  background: "none", border: "none", cursor: "pointer",
+                }}
+              >
+                <div style={{
+                  padding: "6px 14px", borderRadius: 8,
+                  background: isLiked ? "var(--accent2)" : "var(--surface2)",
+                  color: isLiked ? "#fff" : "var(--text2)",
+                  display: "flex", alignItems: "center", gap: 4,
+                }}>
+                  <Heart size={16} fill={isLiked ? "currentColor" : "none"}/>
+                </div>
+                <span style={{ fontSize: 10, color: "var(--text3)", fontWeight: 500 }}>{isLiked ? "Saved" : "Save"}</span>
+              </button>
+
               {/* Speed */}
               <button
                 onClick={() => { const n = (rIdx + 1) % RATES.length; setRIdx(n); setRate(RATES[n]); }}
@@ -355,7 +563,38 @@ export default function MiniPlayer() {
                   </div>
                 )}
               </div>
+
+              {/* Listen together */}
+              <button
+                onClick={() => room ? setShowRoomModal(true) : startRoom()}
+                style={{
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+                  background: "none", border: "none", cursor: "pointer",
+                }}
+              >
+                <div style={{
+                  padding: "6px 14px", borderRadius: 8,
+                  background: room ? "var(--accent)" : "var(--surface2)",
+                  color: room ? "#fff" : "var(--text2)",
+                  display: "flex", alignItems: "center", gap: 4,
+                }}>
+                  <Users size={16}/>
+                </div>
+                <span style={{ fontSize: 10, color: "var(--text3)", fontWeight: 500 }}>{room ? "Live" : "Together"}</span>
+              </button>
             </div>
+
+            {/* Reaction row — only while a room is active */}
+            {room && (
+              <div style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 24 }}>
+                {REACTIONS.map(e => (
+                  <button key={e} onClick={() => sendReaction(e)}
+                    style={{ fontSize: 20, background: "var(--surface2)", border: "none", borderRadius: "50%", width: 40, height: 40, cursor: "pointer" }}>
+                    {e}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Volume slider (full player) */}
             <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "0 8px" }}>
@@ -368,7 +607,25 @@ export default function MiniPlayer() {
           </div>
         </div>
       )}
+
+      {/* ─── Listen together room modal ─── */}
+      {showRoomModal && room && (
+        <div
+          onClick={() => setShowRoomModal(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+        >
+          <div className="card" style={{ padding: 24, width: "100%", maxWidth: 360, textAlign: "center" }} onClick={e => e.stopPropagation()}>
+            <p style={{ fontSize: 12, color: "var(--text3)", textTransform: "uppercase", letterSpacing: .6, marginBottom: 10 }}>Listen together</p>
+            <p style={{ fontSize: 24, fontWeight: 700, color: "var(--text)", letterSpacing: 3, marginBottom: 18, fontFamily: "var(--ff-mono)" }}>{room}</p>
+            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={copyRoomLink}><Copy size={13}/>Copy link</button>
+              <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={shareRoomLink}><Share2 size={13}/>Share</button>
+            </div>
+            <p style={{ fontSize: 12, color: "var(--text3)", marginBottom: 18 }}>Anyone with this link joins in sync — you stay in control of playback.</p>
+            <button className="btn btn-danger btn-sm" style={{ width: "100%" }} onClick={stopRoom}>End session</button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
-

@@ -2,9 +2,10 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Series, Episode } from "@/types";
-import { usePlayer, useApp } from "@/store";
+import { Series, Episode, FriendProgress } from "@/types";
+import { usePlayer, useApp, useToast } from "@/store";
 import { Play, Pause, Lock, Heart, Star, Clock, ArrowLeft, Mic, FileText, Globe, Users, ListPlus } from "lucide-react";
+import Avatar from "@/components/ui/Avatar";
 
 function fmt(s: number) { return `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,"0")}`; }
 
@@ -17,16 +18,25 @@ export default function SeriesDetail() {
   const [activeEp, setActiveEp] = useState<Episode|null>(null);
   const { ep: curEp, playing, setEp, setPlaying } = usePlayer();
   const { liked, toggleLike, user, setUser } = useApp();
+  const showToast = useToast(s => s.show);
+  const [friends, setFriends] = useState<FriendProgress[]>([]);
 
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [addingTo, setAddingTo] = useState<string | null>(null);
-  const [toast, setToast] = useState("");
 
   useEffect(() => {
     if (!id) return;
     fetch(`/api/series/${id}`).then(r => r.json()).then(d => { setSeries(d); setLoading(false); }).catch(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    if (!series?._id || !user?._id) { setFriends([]); return; }
+    fetch(`/api/series/${series._id}/friends-progress?viewerId=${user._id}`)
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d.friends)) setFriends(d.friends); })
+      .catch(() => {});
+  }, [series?._id, user?._id]);
 
   if (loading) return (
     <div className="container-sm" style={{ paddingTop: 40 }}>
@@ -41,8 +51,6 @@ export default function SeriesDetail() {
   const isLiked = user ? (user.favorites || []).includes(series._id) : liked.includes(series._id);
   const firstFree = series.episodes?.find(e => !e.isLocked);
 
-  const flashToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 2000); };
-
   const handleToggleLike = async () => {
     if (!user) { toggleLike(series._id); return; }
     try {
@@ -52,8 +60,10 @@ export default function SeriesDetail() {
         body: JSON.stringify({ seriesId: series._id }),
       });
       const data = await res.json();
-      if (data.favorites) setUser({ ...user, favorites: data.favorites });
-    } catch { flashToast("Couldn't update favorites — try again"); }
+      if (!res.ok || data.error) { showToast(data.error || "Couldn't update favorites", "error"); return; }
+      setUser({ ...user, favorites: data.favorites });
+      showToast(data.favorites.includes(series._id) ? "Saved to favorites" : "Removed from favorites", "success");
+    } catch { showToast("Network error — couldn't update favorites", "error"); }
   };
 
   const addToPlaylist = async (playlistId?: string) => {
@@ -67,7 +77,8 @@ export default function SeriesDetail() {
           body: JSON.stringify({ action: "add", seriesId: series._id }),
         });
         const data = await res.json();
-        if (data.playlists) setUser({ ...user, playlists: data.playlists });
+        if (!res.ok || data.error) { showToast(data.error || "Couldn't add to playlist", "error"); return; }
+        setUser({ ...user, playlists: data.playlists });
       } else {
         if (!newPlaylistName.trim()) return;
         const res = await fetch(`/api/users/${user._id}/playlists`, {
@@ -76,12 +87,13 @@ export default function SeriesDetail() {
           body: JSON.stringify({ name: newPlaylistName.trim(), seriesId: series._id }),
         });
         const data = await res.json();
-        if (data.playlists) setUser({ ...user, playlists: data.playlists });
+        if (!res.ok || data.error) { showToast(data.error || "Couldn't create playlist", "error"); return; }
+        setUser({ ...user, playlists: data.playlists });
         setNewPlaylistName("");
       }
-      flashToast("Added to playlist");
+      showToast("Added to playlist", "success");
       setShowPlaylistModal(false);
-    } catch { flashToast("Couldn't update playlist — try again"); }
+    } catch { showToast("Network error — couldn't update playlist", "error"); }
     finally { setAddingTo(null); }
   };
 
@@ -94,7 +106,7 @@ export default function SeriesDetail() {
       </Link>
 
       {/* Hero */}
-      <div className="card" style={{ overflow: "hidden", marginBottom: 24 }}>
+      <div className="card" style={{ overflow: "hidden", marginBottom: friends.length > 0 ? 14 : 24 }}>
         {series.coverImage && (
           <div style={{ height: 200, overflow: "hidden", position: "relative" }}>
             <img src={series.coverImage} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", filter: "blur(1px)", transform: "scale(1.03)", opacity: .25 }}/>
@@ -135,6 +147,22 @@ export default function SeriesDetail() {
           </div>
         </div>
       </div>
+
+      {/* Friends currently on this series */}
+      {friends.length > 0 && (
+        <div className="card" style={{ padding: "12px 16px", marginBottom: 24, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".4px" }}>Friends here</span>
+          {friends.map(f => {
+            const fEp = series.episodes?.find(e => e._id === f.episodeId);
+            return (
+              <Link key={f.userId} href={`/u/${f.userId}`} style={{ display: "flex", alignItems: "center", gap: 7, textDecoration: "none" }}>
+                <Avatar name={f.name} image={f.image} size={22} />
+                <span style={{ fontSize: 13, color: "var(--text2)" }}>{f.name} · {fEp ? `Ep ${fEp.episodeNumber}` : "listening"}</span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 2, marginBottom: 20, background: "var(--surface)", borderRadius: 10, padding: 4, border: "1px solid var(--border)" }}>
@@ -254,12 +282,6 @@ export default function SeriesDetail() {
               </button>
             </div>
           </div>
-        </div>
-      )}
-
-      {toast && (
-        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 18px", fontSize: 13, color: "var(--text)", boxShadow: "var(--shadow-lg)", zIndex: 600 }}>
-          {toast}
         </div>
       )}
     </div>

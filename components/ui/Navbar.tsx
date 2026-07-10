@@ -2,10 +2,11 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { useCart, useApp } from "@/store";
-import { ShoppingBag, Radio, Menu, X, Shield, Sun, Moon, LogIn, LogOut, UserCircle } from "lucide-react";
+import { useCart, useApp, useToast } from "@/store";
+import { ShoppingBag, Radio, Menu, X, Shield, Sun, Moon, LogIn, LogOut } from "lucide-react";
 import { Theme } from "@/types";
 import { isAdminEmail } from "@/lib/admin";
+import Avatar from "./Avatar";
 
 const THEMES = [
   { id:"midnight", label:"Midnight", dot:"#7c6af7", dark:"midnight-dark" as Theme, light:"midnight-light" as Theme },
@@ -24,11 +25,13 @@ export default function Navbar() {
   const items  = useCart(s => s.items);
   const cartN  = items.reduce((a, i) => a + i.quantity, 0);
   const { theme, setTheme, user, setUser } = useApp();
+  const showToast = useToast(s => s.show);
   const [open,      setOpen]      = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
   const admin = isAdminEmail(user?.email);
 
-  if (path.startsWith("/admin")) return null;
+  // Admin panel and listen-together sessions render their own chrome.
+  if (path.startsWith("/admin") || path.startsWith("/listen")) return null;
 
   const isDark    = DARK_THEMES.includes(theme);
   const curTheme  = THEMES.find(t => t.dark === theme || t.light === theme) ?? THEMES[0];
@@ -44,7 +47,12 @@ export default function Navbar() {
     applyTheme(isDark ? curTheme.light : curTheme.dark);
   };
 
-  const logout = () => { setUser(null); router.push("/"); };
+  const logout = () => {
+    if (!confirm("Log out of your account?")) return;
+    setUser(null);
+    showToast("Logged out", "success");
+    router.push("/");
+  };
 
   const links = [
     { href:"/",       label:"Home"   },
@@ -122,7 +130,7 @@ export default function Navbar() {
               <>
                 <Link href="/profile" className="hide-mobile" title="Profile"
                   style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", borderRadius:8, border:"1px solid var(--border2)", background:"var(--surface2)", color:"var(--text2)", fontSize:13, textDecoration:"none" }}>
-                  {user.image ? <img src={user.image} style={{ width:22, height:22, borderRadius:"50%" }} alt=""/> : <UserCircle size={15}/>}
+                  <Avatar name={user.name} image={user.image} size={22}/>
                   <span style={{ maxWidth:72, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.name?.split(" ")[0]}</span>
                 </Link>
                 <button onClick={logout} className="hide-mobile" title="Log out"
@@ -196,7 +204,7 @@ export default function Navbar() {
                   <>
                     <Link href="/profile" onClick={() => setOpen(false)}
                       style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px", borderRadius:8, border:"1px solid var(--border2)", background:"var(--surface)", cursor:"pointer", fontSize:13, color:"var(--text2)", fontFamily:"var(--ff-sans)", textDecoration:"none" }}>
-                      <UserCircle size={14}/> Profile
+                      <Avatar name={user.name} image={user.image} size={16}/> Profile
                     </Link>
                     <button onClick={() => { logout(); setOpen(false); }}
                       style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px", borderRadius:8, border:"1px solid var(--border2)", background:"var(--surface)", cursor:"pointer", fontSize:13, color:"var(--text2)", fontFamily:"var(--ff-sans)" }}>

@@ -4,12 +4,14 @@ import Link from "next/link";
 import { Series } from "@/types";
 import { Plus, Edit2, Trash2, Star, Eye, EyeOff, TrendingUp, Search, X } from "lucide-react";
 import { adminFetch } from "@/lib/adminFetch";
+import { useToast } from "@/store";
 
 export default function AdminSeries() {
   const [data, setData]         = useState<Series[]>([]);
   const [loading, setLoading]   = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [search, setSearch]     = useState("");
+  const showToast = useToast(s => s.show);
 
   const load = () =>
     fetch("/api/series?limit=100")
@@ -27,18 +29,25 @@ export default function AdminSeries() {
   const del = async (id: string, title: string) => {
     if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
     setDeleting(id);
-    await adminFetch(`/api/series/${id}`, { method: "DELETE" });
-    setData(d => d.filter(x => x._id !== id));
-    setDeleting(null);
+    try {
+      const res = await adminFetch(`/api/series/${id}`, { method: "DELETE" });
+      if (!res.ok) { showToast("Couldn't delete series", "error"); return; }
+      setData(d => d.filter(x => x._id !== id));
+      showToast(`"${title}" deleted`, "success");
+    } catch { showToast("Network error — couldn't delete series", "error"); }
+    finally { setDeleting(null); }
   };
 
   const toggle = async (s: Series, field: "isFeatured" | "isTrending") => {
-    await adminFetch(`/api/series/${s._id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [field]: !s[field] }),
-    });
-    setData(d => d.map(x => x._id === s._id ? { ...x, [field]: !s[field] } : x));
+    try {
+      const res = await adminFetch(`/api/series/${s._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: !s[field] }),
+      });
+      if (!res.ok) { showToast("Couldn't update series", "error"); return; }
+      setData(d => d.map(x => x._id === s._id ? { ...x, [field]: !s[field] } : x));
+    } catch { showToast("Network error", "error"); }
   };
 
   return (

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Product } from "@/types";
 import { Plus, Edit2, Trash2, Star, Search, X } from "lucide-react";
 import { adminFetch } from "@/lib/adminFetch";
+import { useToast } from "@/store";
 
 const CATS = ["all", "accessories", "clothing", "handicrafts", "merchandise"];
 
@@ -13,6 +14,7 @@ export default function AdminProducts() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [cat, setCat]           = useState("all");
   const [search, setSearch]     = useState("");
+  const showToast = useToast(s => s.show);
 
   const load = () => {
     setLoading(true);
@@ -29,11 +31,15 @@ export default function AdminProducts() {
   );
 
   const del = async (id: string, name: string) => {
-    if (!confirm(`Delete "${name}"?`)) return;
+    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
     setDeleting(id);
-    await adminFetch(`/api/products/${id}`, { method: "DELETE" });
-    setData(d => d.filter(x => x._id !== id));
-    setDeleting(null);
+    try {
+      const res = await adminFetch(`/api/products/${id}`, { method: "DELETE" });
+      if (!res.ok) { showToast("Couldn't delete product", "error"); return; }
+      setData(d => d.filter(x => x._id !== id));
+      showToast(`"${name}" deleted`, "success");
+    } catch { showToast("Network error — couldn't delete product", "error"); }
+    finally { setDeleting(null); }
   };
 
   return (

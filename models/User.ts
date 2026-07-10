@@ -22,6 +22,7 @@ const UserSchema = new Schema({
   image:     { type: String },
   favorites: [{ type: String }],  // series ids
   playlists: [PlaylistSchema],
+  following: [{ type: String }],  // user ids this user follows
   createdAt: { type: Date, default: Date.now },
 });
 

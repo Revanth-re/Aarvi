@@ -54,3 +54,27 @@ export const useApp = create<AppStore>()(persist((set)=>({
   user: null,
   setUser:(u)=>set({user:u}),
 }),{name:"naad-app"}));
+
+// ─── Shared toast notification queue ───
+// Any component can call useToast.getState().show("message") or the
+// `show` selector to push a toast. <ToastHost/> (mounted once in
+// ClientRoot) renders whatever is in the queue and auto-dismisses it.
+export type ToastType = "success" | "error" | "info";
+export interface ToastItem { id: number; message: string; type: ToastType; }
+
+interface ToastStore {
+  toasts: ToastItem[];
+  show: (message: string, type?: ToastType) => void;
+  dismiss: (id: number) => void;
+}
+export const useToast = create<ToastStore>((set) => ({
+  toasts: [],
+  show: (message, type = "info") => {
+    const id = Date.now() + Math.random();
+    set((s) => ({ toasts: [...s.toasts, { id, message, type }] }));
+    setTimeout(() => {
+      set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
+    }, 2600);
+  },
+  dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+}));
