@@ -4,6 +4,7 @@ import { Plus, Mic, Image as ImageIcon, Quote, X } from "lucide-react";
 import { StoryGroup, StoryKind } from "@/types";
 import { useApp, useToast } from "@/store";
 import { timeAgo } from "@/lib/gamification";
+import { creatorFetch } from "@/lib/creatorFetch";
 import { Sheet } from "@/components/kit";
 import Avatar from "@/components/ui/Avatar";
 
@@ -120,7 +121,9 @@ function PostStorySheet({
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const r = await fetch("/api/upload", { method: "POST", body: fd });
+      // Needs creatorFetch, not a bare fetch — /api/upload requires an
+      // x-user-id header to know who's uploading (see requireUser).
+      const r = await creatorFetch("/api/upload", { method: "POST", body: fd });
       const d = await r.json();
       if (!r.ok || !d.url) throw new Error(d.error || "Upload failed");
       setMediaUrl(d.url);
