@@ -5,8 +5,21 @@ import SeriesCard from "@/components/SeriesCard";
 import ProductCard from "@/components/ProductCard";
 import { Series, Product } from "@/types";
 import { Headphones, TrendingUp, Sparkles, ArrowRight, Radio, Zap } from "lucide-react";
+import { useIsMobile } from "@/lib/useResponsive";
+import MobileHome from "@/components/mobile/MobileHome";
 
 export default function Home() {
+  const isMobile = useIsMobile();
+
+  // Phones get the app-style home (beams, mood picker, rails); desktop
+  // keeps the existing marketing hero untouched. Rendering one or the
+  // other — rather than both with CSS hiding one — means the hidden
+  // tree never runs its data fetches.
+  if (isMobile) return <MobileHome/>;
+  return <DesktopHome/>;
+}
+
+function DesktopHome() {
   const [featured, setFeatured] = useState<Series[]>([]);
   const [trending, setTrending] = useState<Series[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -56,7 +69,7 @@ export default function Home() {
               <span style={{ fontSize: 12, color: "var(--accent)", fontWeight: 600 }}>Audio Stories & FM Series</span>
             </div>
 
-            <h1 style={{ fontSize: "clamp(2.2rem,5vw,4rem)", fontWeight: 700, color: "var(--text)", lineHeight: 1.1, marginBottom: 20, letterSpacing: "-.03em" }}>
+            <h1 className="font-display" style={{ fontSize: "clamp(2.2rem,5vw,4rem)", fontWeight: 400, color: "var(--text)", lineHeight: 1.1, marginBottom: 20, letterSpacing: "-.01em" }}>
               Stories that<br/>
               <span className="grad" style={{ fontFamily: "var(--ff-serif)", fontStyle: "italic", fontSize: "1.05em" }}>live in your ears.</span>
             </h1>

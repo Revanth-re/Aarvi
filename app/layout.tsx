@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import ClientRoot from "@/components/ui/ClientRoot";
+import { fontDisplay } from "@/lib/fonts";
 
 export const metadata: Metadata = {
   title: "Aarvi — Audio Stories & Series",
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="midnight-dark" suppressHydrationWarning>
+    <html lang="en" data-theme="midnight-dark" suppressHydrationWarning className={fontDisplay.variable}>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>

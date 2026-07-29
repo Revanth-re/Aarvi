@@ -7,7 +7,7 @@
 // misuse, not a determined attacker. For real security this should be
 // replaced with a signed session cookie.
 
-const RAW = process.env.NEXT_PUBLIC_ADMIN_EMAILS || process.env.ADMIN_EMAILS || "claude@adrefresh.com";
+const RAW = process.env.NEXT_PUBLIC_ADMIN_EMAILS || process.env.ADMIN_EMAILS || "revanthrevi131@gmail.com";
 
 export const ADMIN_EMAILS = RAW.split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
 

@@ -3,12 +3,13 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { useApp } from "@/store";
-import { Radio, LayoutDashboard, Headphones, ShoppingBag, ExternalLink, Menu, X, ChevronRight, ShieldAlert } from "lucide-react";
+import { Radio, LayoutDashboard, Headphones, ShoppingBag, ExternalLink, Menu, X, ChevronRight, ShieldAlert, Clapperboard } from "lucide-react";
 import { isAdminEmail } from "@/lib/admin";
 
 const NAV = [
   { href: "/admin",         label: "Dashboard",    icon: LayoutDashboard, exact: true },
   { href: "/admin/series",  label: "Audio Series", icon: Headphones },
+  { href: "/admin/shorts",  label: "Shorts",       icon: Clapperboard },
   { href: "/admin/products",label: "Products",     icon: ShoppingBag },
 ];
 

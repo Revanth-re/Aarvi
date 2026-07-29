@@ -1,4 +1,5 @@
 import mongoose, { Schema, model, models } from "mongoose";
+import { applyBaseSchema } from "@/lib/db/baseSchemaPlugin";
 
 const ProductSchema = new Schema(
   {
@@ -18,5 +19,9 @@ const ProductSchema = new Schema(
   },
   { timestamps: true }
 );
+
+// Enterprise base fields: publicId, status, visibility, audit
+// (createdBy/updatedBy/deletedBy), soft delete, schemaVersion.
+applyBaseSchema(ProductSchema, { visibilityDefault: "public" });
 
 export const ProductModel = models.Product ?? model("Product", ProductSchema);

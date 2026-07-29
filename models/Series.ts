@@ -1,4 +1,5 @@
 import mongoose, { Schema } from "mongoose";
+import { applyBaseSchema } from "@/lib/db/baseSchemaPlugin";
 
 const TranscriptSegmentSchema = new Schema({
   text:  { type: String, required: true },
@@ -26,4 +27,10 @@ const SeriesSchema = new Schema({
   isFeatured:{type:Boolean,default:false}, isTrending:{type:Boolean,default:false},
   totalPlays:{type:Number,default:0},
 },{timestamps:true});
+
+// Enterprise base fields: publicId, status, visibility, audit
+// (createdBy/updatedBy/deletedBy), soft delete, schemaVersion.
+// visibility defaults to "public" here since series are catalog content.
+applyBaseSchema(SeriesSchema, { visibilityDefault: "public" });
+
 export const SeriesModel = mongoose.models.Series || mongoose.model("Series",SeriesSchema);

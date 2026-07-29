@@ -41,13 +41,13 @@ export default function LoginClient() {
         <div style={{ width:40, height:40, borderRadius:12, background:"var(--accent)", display:"flex", alignItems:"center", justifyContent:"center" }}>
           <Radio size={20} color="#fff" strokeWidth={2.5}/>
         </div>
-        <span style={{ fontSize:24, fontWeight:700, color:"var(--text)", letterSpacing:"-.3px" }}>Aarvi</span>
+        <span className="font-display" style={{ fontSize:26, fontWeight:400, color:"var(--text)", letterSpacing:"-.3px" }}>Aarvi</span>
       </div>
 
       <div style={{ maxWidth:380, width:"100%", background:"var(--surface)", border:"1px solid var(--border)", borderRadius:20, padding:"36px 28px", boxShadow:"var(--shadow-lg)" }}>
 
         <div style={{ textAlign:"center", marginBottom:28 }}>
-          <h1 style={{ fontSize:24, fontWeight:700, color:"var(--text)", marginBottom:8 }}>Welcome to Aarvi</h1>
+          <h1 className="font-display" style={{ fontSize:28, fontWeight:400, color:"var(--text)", marginBottom:8 }}>Welcome to Aarvi</h1>
           <p style={{ fontSize:14, color:"var(--text3)", lineHeight:1.6 }}>Sign in to save your progress, liked series, and cart items</p>
         </div>
 

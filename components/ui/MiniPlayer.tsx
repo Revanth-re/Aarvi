@@ -501,9 +501,14 @@ export default function MiniPlayer() {
     broadcastEvent("reaction", { emoji });
   };
 
-  // Hidden entirely inside admin, and inside a listen-together session
-  // (that page has its own dedicated, host-controlled mini-player).
-  const hiddenRoute = path.startsWith("/admin") || path.startsWith("/listen");
+  // Hidden entirely inside admin, inside a listen-together session
+  // (that page has its own dedicated, host-controlled mini-player), and
+  // inside the Shorts feed — Shorts owns its own <audio> element, and
+  // showing a second set of transport controls over a full-screen reel
+  // would let the user drive two audio sources at once.
+  const hiddenRoute = path.startsWith("/admin")
+    || path.startsWith("/listen")
+    || path.startsWith("/shorts");
 
   if (hiddenRoute || !ep || dismissed) return <ReactionOverlay reactions={reactions} />;
   const pct = duration > 0 ? (progress / duration) * 100 : 0;
@@ -539,7 +544,8 @@ export default function MiniPlayer() {
       <ReactionOverlay reactions={reactions} />
 
       {/* ─── MINI BAR ─── */}
-      <div style={{
+      {/* .mini-player-bar lifts this above the mobile tab bar (globals.css). */}
+      <div className="mini-player-bar" style={{
         position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100,
         background: "var(--surface)", borderTop: "1px solid var(--border2)",
         boxShadow: "0 -4px 30px rgba(0,0,0,.3)",

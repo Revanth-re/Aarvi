@@ -72,7 +72,7 @@ export default function Navbar() {
             <div style={{ width:32, height:32, borderRadius:9, background:"var(--accent)", display:"flex", alignItems:"center", justifyContent:"center" }}>
               <Radio size={16} color="#fff" strokeWidth={2.5}/>
             </div>
-            <span style={{ fontFamily:"var(--ff-sans)", fontSize:18, fontWeight:700, color:"var(--text)", letterSpacing:"-.3px" }}>Aarvi</span>
+            <span className="font-display" style={{ fontSize:20, fontWeight:400, color:"var(--text)", letterSpacing:"-.3px" }}>Aarvi</span>
           </Link>
 
           {/* Desktop nav links */}

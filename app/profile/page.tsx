@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import ProfilePageClient from "./client";
+import ProfileRouter from "./ProfileRouter";
 
 export default function ProfilePage() {
   return (
@@ -8,7 +8,7 @@ export default function ProfilePage() {
         <div className="skeleton" style={{ height: 120, borderRadius: 16 }} />
       </div>
     }>
-      <ProfilePageClient />
+      <ProfileRouter />
     </Suspense>
   );
 }

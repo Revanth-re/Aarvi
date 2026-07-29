@@ -233,6 +233,24 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 .toggle input:checked+.toggle-track::before{transform:translateX(18px)}
 .full-player-overlay{display:flex;flex-direction:column}
 
+/* ══════════════════════════════════════════
+   Mobile app shell — bottom tab bar
+   ══════════════════════════════════════════
+   The tab bar only exists under 768px. Above that the existing desktop
+   navbar is the only navigation, so nothing about the desktop layout
+   changes. --nav-h is what everything fixed to the bottom (mini player,
+   toasts) offsets itself by, so there's a single number to change. */
+:root{ --nav-h:0px; }
+.bottom-nav{ display:none }
+
+@media(max-width:768px){
+  :root{ --nav-h:64px }
+  .bottom-nav{ display:block }
+  /* Lift the mini player and toasts above the tab bar. */
+  .mini-player-bar{ bottom:calc(var(--nav-h) + env(safe-area-inset-bottom,0px))!important }
+  .toast{ bottom:calc(var(--nav-h) + 96px) }
+}
+
 @media(max-width:768px){
   .hide-mobile{display:none!important}.show-mobile-flex{display:flex!important}
   .container{padding:0 16px}
