@@ -1,7 +1,7 @@
 "use client";
 import { ReactNode } from "react";
 import { Palette, Bell, Headphones, Timer, Download, Shield, Sun, Moon, Monitor, Layers } from "lucide-react";
-import { THEME_COLORS, ThemeMode, TabBarStyle, UserSettings } from "@/types";
+import { ThemeMode, TabBarStyle, UserSettings } from "@/types";
 import { useApp } from "@/store";
 import { Screen } from "@/components/kit";
 import TopBar from "@/components/shell/TopBar";
@@ -21,7 +21,6 @@ const SLEEP_PRESETS = [
 export default function SettingsScreen() {
   const settings = useApp(s => s.settings);
   const setSettings = useApp(s => s.setSettings);
-  const setThemeColor = useApp(s => s.setThemeColor);
   const setThemeMode = useApp(s => s.setThemeMode);
   const setTabBarStyle = useApp(s => s.setTabBarStyle);
 
@@ -40,7 +39,7 @@ export default function SettingsScreen() {
         </h1>
 
         {/* ── Appearance ── */}
-        <Group icon={<Palette size={15}/>} title="Appearance" sub="Mode, tab colour and transparency">
+        <Group icon={<Palette size={15}/>} title="Appearance" sub="Mode and tab bar style">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 16 }}>
             {MODES.map(({ key, label, Icon }) => {
               const on = settings.themeMode === key;
@@ -55,27 +54,6 @@ export default function SettingsScreen() {
                     border: `1px solid ${on ? "transparent" : "var(--border2)"}`,
                   }}>
                   <Icon size={16}/>{label}
-                </button>
-              );
-            })}
-          </div>
-
-          <Label>Screen tab colour</Label>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 16 }}>
-            {THEME_COLORS.map(c => {
-              const on = settings.themeColor === c.key;
-              return (
-                <button key={c.key} onClick={() => setThemeColor(c.key)}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 7, padding: "10px 11px",
-                    borderRadius: 12, cursor: "pointer", fontFamily: "inherit",
-                    background: on ? "color-mix(in srgb, var(--accent) 12%, transparent)" : "var(--surface2)",
-                    border: `1.5px solid ${on ? "var(--accent)" : "var(--border2)"}`,
-                  }}>
-                  <span style={{ width: 12, height: 12, borderRadius: "50%", background: c.dot, flex: "none" }}/>
-                  <span className="truncate" style={{ fontSize: 11.5, fontWeight: on ? 700 : 500, color: on ? "var(--accent)" : "var(--text2)" }}>
-                    {c.label}
-                  </span>
                 </button>
               );
             })}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
-import { requireAdmin } from "@/lib/requireAdmin";
+import { requireUser } from "@/lib/requireUser";
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -12,9 +12,15 @@ export const config = {
   api: { bodyParser: { sizeLimit: "50mb" } },
 };
 
+// Any logged-in user can upload here now — not just admins — since
+// creators need to upload their own cover art and episode audio. The
+// only gate is that x-user-id has to resolve to a real account (see
+// requireUser); there's no per-file size/rate limiting beyond the 50mb
+// body cap below, which is fine for a demo but worth revisiting before
+// opening this up to a large public userbase.
 export async function POST(request: NextRequest) {
-  const denied = requireAdmin(request);
-  if (denied) return denied;
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;

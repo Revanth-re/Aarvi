@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/mongodb";
 import { ShortModel } from "@/models/Short";
 import { SeriesModel } from "@/models/Series";
 import { requireAdmin } from "@/lib/requireAdmin";
+import { requireUser } from "@/lib/requireUser";
 import { gradientFor } from "@/lib/gamification";
 import { idOf, iso } from "@/lib/serialize";
 import { ShortFeedItem } from "@/types";
@@ -69,10 +70,12 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/shorts — admin only.
+// POST /api/shorts — admins can cut a Short from any episode. A
+// regular creator can only cut one from an episode in a series they
+// own, and the server sets creatorId from their session rather than
+// trusting whatever the client sends.
 export async function POST(req: NextRequest) {
-  const denied = requireAdmin(req);
-  if (denied) return denied;
+  const isAdmin = !requireAdmin(req);
 
   try {
     await connectDB();
@@ -88,14 +91,24 @@ export async function POST(req: NextRequest) {
 
     // Validate the clip points at a real episode, or it would silently
     // never appear in the feed (GET skips orphans).
-    const series = await SeriesModel.findById(seriesId).select("episodes._id").lean<any>();
+    const series = await SeriesModel.findById(seriesId).select("episodes._id creatorId").lean<any>();
     if (!series) return NextResponse.json({ error: "Series not found" }, { status: 404 });
     if (!(series.episodes || []).some((e: any) => idOf(e._id) === episodeId)) {
       return NextResponse.json({ error: "Episode not in that series" }, { status: 404 });
     }
 
+    let creatorId = body.creatorId;
+    if (!isAdmin) {
+      const auth = await requireUser(req);
+      if (auth instanceof NextResponse) return auth;
+      if (series.creatorId !== auth.userId) {
+        return NextResponse.json({ error: "You can only cut Shorts from your own episodes" }, { status: 403 });
+      }
+      creatorId = auth.userId;
+    }
+
     const doc = await ShortModel.create({
-      ...body, startSec,
+      ...body, startSec, creatorId,
       gradient: body.gradient || gradientFor(seriesId + episodeId),
     });
     return NextResponse.json({ _id: idOf(doc._id), ok: true }, { status: 201 });

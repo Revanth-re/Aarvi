@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Mic, Users, Headphones, TrendingUp, Plus } from "lucide-react";
+import { Mic, Users, Headphones, TrendingUp, Plus, Clapperboard, Pencil } from "lucide-react";
 import { Series } from "@/types";
 import { useApp } from "@/store";
 import { formatCount } from "@/lib/gamification";
@@ -66,38 +66,51 @@ export default function CreatorScreen() {
           <Metric icon={<TrendingUp size={15}/>} value={String(totalEpisodes)} label="Episodes"/>
         </div>
 
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link href="/creator/new" className="btn btn-primary btn-sm" style={{ flex: 1, justifyContent: "center", textDecoration: "none" }}>
+            <Plus size={14}/>New series
+          </Link>
+          <Link href="/creator/shorts/new" className="btn btn-soft btn-sm" style={{ flex: 1, justifyContent: "center", textDecoration: "none" }}>
+            <Clapperboard size={14}/>Cut a Short
+          </Link>
+        </div>
+
         <section>
           <SectionHeader title="Your series"/>
           {series.length ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {series.map(s => (
-                <Link key={s._id} href={`/series/${s._id}`} className="card"
-                  style={{ display: "flex", alignItems: "center", gap: 12, padding: 10, textDecoration: "none" }}>
-                  <Cover id={s._id} url={s.coverImage} size={52} radius={12}/>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span className="truncate" style={{ display: "block", fontSize: 13.5, fontWeight: 700, color: "var(--text)" }}>
-                      {s.title}
+                <div key={s._id} className="card" style={{ display: "flex", alignItems: "center", gap: 12, padding: 10 }}>
+                  <Link href={`/series/${s._id}`} style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, textDecoration: "none" }}>
+                    <Cover id={s._id} url={s.coverImage} size={52} radius={12}/>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span className="truncate" style={{ display: "block", fontSize: 13.5, fontWeight: 700, color: "var(--text)" }}>
+                        {s.title}
+                      </span>
+                      <span className="truncate" style={{ display: "block", fontSize: 11.5, color: "var(--text3)" }}>
+                        {formatCount(s.totalPlays ?? 0)} plays · {s.totalEpisodes ?? s.episodes?.length ?? 0} episodes
+                      </span>
                     </span>
-                    <span className="truncate" style={{ display: "block", fontSize: 11.5, color: "var(--text3)" }}>
-                      {formatCount(s.totalPlays ?? 0)} plays · {s.totalEpisodes ?? s.episodes?.length ?? 0} episodes
-                    </span>
-                  </span>
-                </Link>
+                  </Link>
+                  <Link href={`/creator/series/${s._id}/edit`} className="btn btn-ghost btn-xs" style={{ textDecoration: "none" }}>
+                    <Pencil size={12}/>Edit
+                  </Link>
+                </div>
               ))}
             </div>
           ) : (
             <EmptyState
               icon={<Plus size={22}/>}
               title="You haven't published anything yet"
-              body="Series are created in the admin panel — upload audio, add episodes, and they'll appear here with their play counts."
-              cta={{ href: "/admin/series/new", label: "Create a series" }}
+              body="Publish a series with at least one episode and it'll show up here with its play counts — no admin approval needed."
+              cta={{ href: "/creator/new", label: "Publish a series" }}
             />
           )}
         </section>
 
         <p style={{ fontSize: 11.5, color: "var(--text3)", lineHeight: 1.6 }}>
-          Recording and AI voice tools aren&apos;t built — this studio reports on
-          series you upload through the admin panel rather than producing audio.
+          Recording and AI voice tools aren&apos;t built — upload finished audio
+          files and Creator Studio handles the rest (cover art, episodes, Shorts).
         </p>
       </Screen>
     </>

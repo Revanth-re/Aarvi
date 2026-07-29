@@ -9,9 +9,15 @@ interface Props {
   currentUrl?: string;
   label?: string;
   compact?: boolean;
+  /** Defaults to adminFetch (attaches x-user-email). Creator screens
+   *  pass creatorFetch (attaches x-user-id) instead, since /api/upload
+   *  now accepts any logged-in user, not just admins. */
+  fetcher?: typeof adminFetch;
 }
 
-export default function FileUpload({ onUpload, type, currentUrl, label, compact = false }: Props) {
+export default function FileUpload({
+  onUpload, type, currentUrl, label, compact = false, fetcher = adminFetch,
+}: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -37,7 +43,7 @@ export default function FileUpload({ onUpload, type, currentUrl, label, compact 
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await adminFetch("/api/upload", {
+      const res = await fetcher("/api/upload", {
         method: "POST",
         body: formData,
       });

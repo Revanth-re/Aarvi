@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { SeriesModel } from "@/models/Series";
 import { requireAdmin } from "@/lib/requireAdmin";
+import { requireUser } from "@/lib/requireUser";
 import { processEpisodeTranscripts } from "@/lib/gemini";
 import { VIBES } from "@/types";
 
@@ -60,14 +61,28 @@ export async function GET(req: NextRequest) {
   } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }
 }
 
+// Admins can create house/curated content with any flags they like.
+// Anyone else can still publish here — a creator posting their own
+// series, Instagram-style — but the server pins creatorId to their own
+// account and forces isFeatured/isTrending off, so a regular user can't
+// self-promote onto the curated rails.
 export async function POST(req: NextRequest) {
-  const denied = requireAdmin(req);
-  if (denied) return denied;
+  const isAdmin = !requireAdmin(req);
+  let creatorId: string | null = null;
+  if (!isAdmin) {
+    const auth = await requireUser(req);
+    if (auth instanceof NextResponse) return auth;
+    creatorId = auth.userId;
+  }
   try {
     await connectDB();
     const body = await req.json();
     const episodes = body.episodes?.length ? await processEpisodeTranscripts(body.episodes) : (body.episodes || []);
-    const doc = await SeriesModel.create({ ...body, episodes, totalEpisodes: episodes.length });
+    const doc = await SeriesModel.create({
+      ...body,
+      episodes, totalEpisodes: episodes.length,
+      ...(creatorId ? { creatorId, isFeatured: false, isTrending: false } : {}),
+    });
     return NextResponse.json(doc, { status: 201 });
   } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }
 }

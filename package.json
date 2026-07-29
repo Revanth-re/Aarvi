@@ -1,5 +1,5 @@
 {
-  "name": "swara-fm",
+  "name": "naad-v2",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -13,6 +13,8 @@
     "lucide-react": "^1.16.0",
     "mongoose": "^9.6.2",
     "next": "16.2.6",
+    "pusher": "^5.3.4",
+    "pusher-js": "^8.5.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "zustand": "^5.0.13"

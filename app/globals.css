@@ -3,11 +3,10 @@
 /* ══════════════════════════════════════════════════════════
    SWARA FM — design tokens
    ══════════════════════════════════════════════════════════
-   Six "screen tab colours" (Settings → Appearance), each with a light
-   and a dark variant, applied as data-theme="<colour>-<mode>" on <html>.
+   One palette (Lavender), light and dark variants, applied as
+   data-theme="lavender-<mode>" on <html>.
 
-   Every screen reads these variables instead of hardcoding colours, so
-   switching palette re-skins the entire app instantly. */
+   Every screen reads these variables instead of hardcoding colours. */
 
 :root {
   --ff-sans: 'Sora', system-ui, -apple-system, sans-serif;
@@ -36,106 +35,6 @@
   --text:#F2EEFB; --text2:#B4A9CC; --text3:#7C7191;
   --success:#34D399; --warning:#FBBF24; --danger:#F87171; --coin:#F0B653;
   --shadow:0 2px 18px rgba(0,0,0,.4); --shadow-lg:0 10px 38px rgba(0,0,0,.5);
-}
-
-/* ── ROSE GOLD ── */
-[data-theme="rosegold-light"] {
-  --bg:#FDF3F2; --bg2:#FAE7E5; --surface:#FFFFFF; --surface2:#FCEEEC;
-  --border:#F6DCD8; --border2:#EFC5BF;
-  --accent:#E0716B; --accent-h:#CC5A54; --accent2:#F0A99A;
-  --grad:linear-gradient(135deg,#E8776F,#F3AE97);
-  --text:#301A18; --text2:#5F4340; --text3:#A08682;
-  --success:#16A34A; --warning:#E0722B; --danger:#DC2626; --coin:#E8A33D;
-  --shadow:0 2px 14px rgba(224,113,107,.10); --shadow-lg:0 10px 34px rgba(224,113,107,.18);
-}
-[data-theme="rosegold-dark"] {
-  --bg:#1B1211; --bg2:#241716; --surface:#2B1B19; --surface2:#3A2421;
-  --border:#ffffff12; --border2:#ffffff1F;
-  --accent:#F08A82; --accent-h:#E0716B; --accent2:#F7BCAB;
-  --grad:linear-gradient(135deg,#E0716B,#F0A99A);
-  --text:#FBEEEC; --text2:#CFAFAA; --text3:#96766F;
-  --success:#34D399; --warning:#FBBF24; --danger:#F87171; --coin:#F0B653;
-  --shadow:0 2px 18px rgba(0,0,0,.4); --shadow-lg:0 10px 38px rgba(0,0,0,.5);
-}
-
-/* ── MINT ── */
-[data-theme="mint-light"] {
-  --bg:#EFFBF6; --bg2:#DDF5EC; --surface:#FFFFFF; --surface2:#E8F9F1;
-  --border:#CDEEE1; --border2:#A9E2CD;
-  --accent:#12A87C; --accent-h:#0E8C67; --accent2:#6FD9B6;
-  --grad:linear-gradient(135deg,#17B487,#77DDBB);
-  --text:#0E2A22; --text2:#2E5247; --text3:#6E9187;
-  --success:#16A34A; --warning:#E0722B; --danger:#DC2626; --coin:#E8A33D;
-  --shadow:0 2px 14px rgba(18,168,124,.10); --shadow-lg:0 10px 34px rgba(18,168,124,.18);
-}
-[data-theme="mint-dark"] {
-  --bg:#081813; --bg2:#0C211A; --surface:#102A22; --surface2:#17392E;
-  --border:#ffffff12; --border2:#ffffff1F;
-  --accent:#34D6A6; --accent-h:#12A87C; --accent2:#8DE8C9;
-  --grad:linear-gradient(135deg,#12A87C,#6FD9B6);
-  --text:#E9FBF4; --text2:#9CCBBB; --text3:#63897C;
-  --success:#34D399; --warning:#FBBF24; --danger:#F87171; --coin:#F0B653;
-  --shadow:0 2px 18px rgba(0,0,0,.4); --shadow-lg:0 10px 38px rgba(0,0,0,.5);
-}
-
-/* ── CYBER BLUE ── */
-[data-theme="cyberblue-light"] {
-  --bg:#EFF5FE; --bg2:#DDEBFC; --surface:#FFFFFF; --surface2:#E9F1FE;
-  --border:#CFE0FA; --border2:#A9C8F5;
-  --accent:#2D7FF0; --accent-h:#1C67D1; --accent2:#7FB2F7;
-  --grad:linear-gradient(135deg,#3A87F2,#86BCF9);
-  --text:#0F1D33; --text2:#2F4463; --text3:#71879F;
-  --success:#16A34A; --warning:#E0722B; --danger:#DC2626; --coin:#E8A33D;
-  --shadow:0 2px 14px rgba(45,127,240,.10); --shadow-lg:0 10px 34px rgba(45,127,240,.18);
-}
-[data-theme="cyberblue-dark"] {
-  --bg:#0A1119; --bg2:#0E1824; --surface:#12202F; --surface2:#182B3E;
-  --border:#ffffff12; --border2:#ffffff1F;
-  --accent:#5FA3F7; --accent-h:#2D7FF0; --accent2:#A6CCFA;
-  --grad:linear-gradient(135deg,#2D7FF0,#7FB2F7);
-  --text:#EAF3FE; --text2:#A3BCD6; --text3:#6B849C;
-  --success:#34D399; --warning:#FBBF24; --danger:#F87171; --coin:#F0B653;
-  --shadow:0 2px 18px rgba(0,0,0,.4); --shadow-lg:0 10px 38px rgba(0,0,0,.5);
-}
-
-/* ── PEACH ── */
-[data-theme="peach-light"] {
-  --bg:#FEF4EC; --bg2:#FCE8D8; --surface:#FFFFFF; --surface2:#FDEFE3;
-  --border:#F8DCC6; --border2:#F2C5A3;
-  --accent:#EE8B3C; --accent-h:#D6742A; --accent2:#F7BC85;
-  --grad:linear-gradient(135deg,#F1913F,#F8C48F);
-  --text:#31200F; --text2:#5E4530; --text3:#A08872;
-  --success:#16A34A; --warning:#E0722B; --danger:#DC2626; --coin:#E8A33D;
-  --shadow:0 2px 14px rgba(238,139,60,.10); --shadow-lg:0 10px 34px rgba(238,139,60,.18);
-}
-[data-theme="peach-dark"] {
-  --bg:#1A1209; --bg2:#22180D; --surface:#2A1F11; --surface2:#392A18;
-  --border:#ffffff12; --border2:#ffffff1F;
-  --accent:#F5A35F; --accent-h:#EE8B3C; --accent2:#FAC9A0;
-  --grad:linear-gradient(135deg,#EE8B3C,#F7BC85);
-  --text:#FCF1E6; --text2:#D3B79B; --text3:#997D63;
-  --success:#34D399; --warning:#FBBF24; --danger:#F87171; --coin:#F0B653;
-  --shadow:0 2px 18px rgba(0,0,0,.4); --shadow-lg:0 10px 38px rgba(0,0,0,.5);
-}
-
-/* ── MIDNIGHT ── */
-[data-theme="midnight-light"] {
-  --bg:#F1F1F8; --bg2:#E4E4F1; --surface:#FFFFFF; --surface2:#EDEDF7;
-  --border:#DCDCEC; --border2:#C2C2DF;
-  --accent:#4B4BA8; --accent-h:#3B3B8C; --accent2:#8E8ED2;
-  --grad:linear-gradient(135deg,#5555B5,#9494D8);
-  --text:#14142B; --text2:#3A3A5C; --text3:#7B7B9C;
-  --success:#16A34A; --warning:#E0722B; --danger:#DC2626; --coin:#E8A33D;
-  --shadow:0 2px 14px rgba(75,75,168,.10); --shadow-lg:0 10px 34px rgba(75,75,168,.18);
-}
-[data-theme="midnight-dark"] {
-  --bg:#0A0A14; --bg2:#10101E; --surface:#161628; --surface2:#1F1F38;
-  --border:#ffffff12; --border2:#ffffff1F;
-  --accent:#7E7EDB; --accent-h:#6363C4; --accent2:#B4B4EC;
-  --grad:linear-gradient(135deg,#6363C4,#A5A5E4);
-  --text:#EDEDF8; --text2:#A6A6C6; --text3:#6E6E90;
-  --success:#34D399; --warning:#FBBF24; --danger:#F87171; --coin:#F0B653;
-  --shadow:0 2px 18px rgba(0,0,0,.45); --shadow-lg:0 10px 38px rgba(0,0,0,.55);
 }
 
 @layer base {

@@ -30,18 +30,12 @@ export interface AuditLogEntry {
 // ("screen tab colour") and a mode. They're stored separately and
 // combined into the `data-theme` attribute, so picking a new colour
 // keeps whatever light/dark preference you already had.
-export type ThemeColor =
-  | "lavender" | "rosegold" | "mint" | "cyberblue" | "peach" | "midnight";
+export type ThemeColor = "lavender";
 export type ThemeMode = "light" | "dark" | "system";
 export type TabBarStyle = "transparent" | "normal";
 
 export const THEME_COLORS: { key: ThemeColor; label: string; dot: string }[] = [
   { key: "lavender",  label: "Lavender",   dot: "#8B5CF6" },
-  { key: "rosegold",  label: "Rose gold",  dot: "#E0716B" },
-  { key: "mint",      label: "Mint",       dot: "#12A87C" },
-  { key: "cyberblue", label: "Cyber blue", dot: "#2D7FF0" },
-  { key: "peach",     label: "Peach",      dot: "#EE8B3C" },
-  { key: "midnight",  label: "Midnight",   dot: "#4B4BA8" },
 ];
 
 // ══════════════════════════════════════════════════════════
