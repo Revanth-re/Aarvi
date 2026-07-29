@@ -14,6 +14,9 @@ const ShortSchema = new Schema({
   endSec:    { type: Number, required: true },
 
   caption:   { type: String, default: "" },
+  /** Second line under the caption, e.g. "60 seconds that break the
+   *  whole case open." Sells the clip without spoiling it. */
+  hook:      { type: String, default: "" },
 
   // Creator attribution. creatorId is optional so seeded/house clips
   // can exist before real creator accounts do — creatorHandle is what
@@ -29,6 +32,8 @@ const ShortSchema = new Schema({
   // can render the correct filled/unfilled heart per user, and so a
   // double-tap can't inflate the count.
   likedBy:      [{ type: String }],
+  /** Bookmarked into Library → Saved. */
+  savedBy:      [{ type: String }],
   commentCount: { type: Number, default: 0 },
   playCount:    { type: Number, default: 0 },
 }, { timestamps: true });

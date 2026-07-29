@@ -17,8 +17,8 @@ const CoinTxSchema = new Schema({
     type: String,
     required: true,
     enum: [
-      "daily_checkin", "streak_bonus", "squad_bonus", "badge_reward",
-      "unlock_episode", "purchase", "admin_grant",
+      "daily_checkin", "streak_bonus", "watch_ad", "invite_friend",
+      "badge_reward", "unlock_episode", "purchase", "admin_grant",
     ],
   },
   note:         { type: String, default: "" },

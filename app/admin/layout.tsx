@@ -16,7 +16,8 @@ const NAV = [
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const path   = usePathname();
   const router = useRouter();
-  const theme  = useApp(s => s.theme);
+  // Admin inherits whatever palette the app is set to.
+  const theme  = useApp(s => s.settings.themeColor);
   const user   = useApp(s => s.user);
   const [open, setOpen]     = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -67,18 +68,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   );
 
   if (!mounted) return (
-    <div data-theme={theme} style={{ minHeight: "100vh", background: "var(--bg)" }} />
+    <div data-theme={`${theme}-light`} style={{ minHeight: "100vh", background: "var(--bg)" }} />
   );
 
   if (!admin) return (
-    <div data-theme={theme} style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: 24, textAlign: "center" }}>
+    <div data-theme={`${theme}-light`} style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: 24, textAlign: "center" }}>
       <ShieldAlert size={32} color="var(--text3)" />
       <p style={{ color: "var(--text3)", fontSize: 14 }}>Redirecting…</p>
     </div>
   );
 
   return (
-    <div data-theme={theme} style={{ display: "flex", minHeight: "100vh", background: "var(--bg)" }}>
+    <div data-theme={`${theme}-light`} style={{ display: "flex", minHeight: "100vh", background: "var(--bg)" }}>
 
       {/* ── Desktop & Tablet Sidebar (≥769px) ── */}
       <aside style={{

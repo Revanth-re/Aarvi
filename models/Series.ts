@@ -26,7 +26,24 @@ const SeriesSchema = new Schema({
   episodes:[EpSchema], tags:[String],
   isFeatured:{type:Boolean,default:false}, isTrending:{type:Boolean,default:false},
   totalPlays:{type:Number,default:0},
+
+  // Creator account that owns this series. Optional so house/seeded
+  // content can exist before real creator accounts do.
+  creatorId:{type:String,index:true},
+
+  // Average episode length in minutes. Stored rather than computed on
+  // read because the "Under 10 minutes" rail filters on it, and
+  // averaging every episode's duration per request doesn't scale.
+  avgMinutes:{type:Number,default:0},
+
+  // Vibe keys (see VIBES in types/index.ts) powering Discover's
+  // "tell us the vibe" picker.
+  vibes:[String],
 },{timestamps:true});
+
+// Language and vibe are both filter-first fields on Discover.
+SeriesSchema.index({ language: 1 });
+SeriesSchema.index({ vibes: 1 });
 
 // Enterprise base fields: publicId, status, visibility, audit
 // (createdBy/updatedBy/deletedBy), soft delete, schemaVersion.

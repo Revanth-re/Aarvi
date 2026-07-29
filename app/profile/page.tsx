@@ -1,14 +1,7 @@
-import { Suspense } from "react";
-import ProfileRouter from "./ProfileRouter";
+import ProfileScreen from "@/components/screens/ProfileScreen";
 
-export default function ProfilePage() {
-  return (
-    <Suspense fallback={
-      <div className="container-sm" style={{ paddingTop: 60 }}>
-        <div className="skeleton" style={{ height: 120, borderRadius: 16 }} />
-      </div>
-    }>
-      <ProfileRouter />
-    </Suspense>
-  );
+export const metadata = { title: "Profile — SWARA FM" };
+
+export default function Page() {
+  return <ProfileScreen/>;
 }

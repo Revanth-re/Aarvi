@@ -42,7 +42,8 @@ export async function POST(req: NextRequest, { params }: P) {
     if (action === "accept") {
       await notifyUser(requesterId, {
         type: "follow_accept",
-        message: `${actor.name || "Someone"} accepted your follow request`,
+        category: "social",
+        title: `${actor.name || "Someone"} accepted your follow request`,
         link: `/u/${id}`,
         fromUserId: id,
         fromUserName: actor.name,

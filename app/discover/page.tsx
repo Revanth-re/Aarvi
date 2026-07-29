@@ -1,13 +1,7 @@
-import MobileDiscover from "@/components/mobile/MobileDiscover";
+import DiscoverScreen from "@/components/screens/DiscoverScreen";
 
-export const metadata = {
-  title: "Discover — Aarvi",
-  description: "Search shows, browse genres and find rising creators.",
-};
+export const metadata = { title: "Discover — SWARA FM" };
 
-export default function DiscoverPage() {
-  // Deliberately not gated behind a mobile check: this is a genuinely
-  // useful browse/search screen at any width, and the bottom tab bar
-  // that links to it is the mobile-only part.
-  return <MobileDiscover/>;
+export default function Page() {
+  return <DiscoverScreen/>;
 }

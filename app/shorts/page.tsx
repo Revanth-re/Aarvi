@@ -1,10 +1,7 @@
-import ShortsFeed from "@/components/mobile/ShortsFeed";
+import ShortsScreen from "@/components/screens/ShortsScreen";
 
-export const metadata = {
-  title: "Shorts — Aarvi",
-  description: "Bite-sized moments from every audio series.",
-};
+export const metadata = { title: "Shorts — SWARA FM" };
 
-export default function ShortsPage() {
-  return <ShortsFeed/>;
+export default function Page() {
+  return <ShortsScreen/>;
 }

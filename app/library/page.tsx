@@ -1,10 +1,7 @@
-import MobileLibrary from "@/components/mobile/MobileLibrary";
+import LibraryScreen from "@/components/screens/LibraryScreen";
 
-export const metadata = {
-  title: "Library — Aarvi",
-  description: "Your saved series, playlists and listening history.",
-};
+export const metadata = { title: "Library — SWARA FM" };
 
-export default function LibraryPage() {
-  return <MobileLibrary/>;
+export default function Page() {
+  return <LibraryScreen/>;
 }

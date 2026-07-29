@@ -4,16 +4,16 @@ import { ShortModel } from "@/models/Short";
 import { SeriesModel } from "@/models/Series";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { gradientFor } from "@/lib/gamification";
+import { idOf, iso } from "@/lib/serialize";
 import { ShortFeedItem } from "@/types";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// GET /api/shorts?limit=20&userId=<id>&seriesId=<id>
+// GET /api/shorts?userId=&seriesId=&limit=
 //
-// Returns the vertical reel feed. Each Short stores only a time range
-// into an episode, so this route joins the parent series to attach the
-// audio URL, cover art and titles the feed needs — one request per
-// feed load instead of one per card.
+// A Short stores only a time range into an episode, so this joins the
+// parent series to attach the audio URL and artwork the feed needs —
+// one request per feed load rather than one per card.
 export async function GET(req: NextRequest) {
   try {
     await connectDB();
@@ -28,48 +28,38 @@ export async function GET(req: NextRequest) {
     const shorts = await ShortModel.find(q).sort({ createdAt: -1 }).limit(limit).lean<any[]>();
     if (!shorts.length) return NextResponse.json([]);
 
-    // Single batched lookup for every series referenced by this page of
-    // shorts, rather than one query per short.
-    const seriesIds = [...new Set(shorts.map(s => s.seriesId))];
-    const seriesDocs = await SeriesModel.find({ _id: { $in: seriesIds } })
-      .select("title coverImage genre episodes._id episodes.title episodes.audioUrl")
+    const series = await SeriesModel
+      .find({ _id: { $in: [...new Set(shorts.map(s => s.seriesId))] } })
+      .select("title coverImage episodes._id episodes.title episodes.audioUrl")
       .lean<any[]>();
-
-    const byId = new Map(seriesDocs.map(s => [s._id.toString(), s]));
+    const byId = new Map(series.map(s => [idOf(s._id), s]));
 
     const feed: ShortFeedItem[] = [];
     for (const s of shorts) {
-      const series = byId.get(s.seriesId);
-      // Skip orphans rather than shipping a card that can't play —
-      // happens if a series was deleted but its clips weren't.
-      if (!series) continue;
+      const parent = byId.get(s.seriesId);
+      if (!parent) continue;   // orphan — never ship a card that can't play
 
-      const ep = (series.episodes || []).find(
-        (e: any) => e._id.toString() === s.episodeId
-      );
+      const ep = (parent.episodes || []).find((e: any) => idOf(e._id) === s.episodeId);
       if (!ep?.audioUrl) continue;
 
       const likedBy: string[] = s.likedBy || [];
+      const savedBy: string[] = s.savedBy || [];
 
       feed.push({
-        _id: s._id.toString(),
-        seriesId: s.seriesId,
-        episodeId: s.episodeId,
-        startSec: s.startSec ?? 0,
-        endSec: s.endSec,
-        caption: s.caption || "",
-        creatorId: s.creatorId,
-        creatorHandle: s.creatorHandle || "@swara",
+        _id: idOf(s._id),
+        seriesId: s.seriesId, episodeId: s.episodeId,
+        startSec: s.startSec ?? 0, endSec: s.endSec,
+        caption: s.caption || "", hook: s.hook || "",
+        creatorId: s.creatorId, creatorHandle: s.creatorHandle || "@swara",
         gradient: s.gradient || gradientFor(s.seriesId),
         likeCount: likedBy.length,
         commentCount: s.commentCount ?? 0,
         playCount: s.playCount ?? 0,
-        createdAt: s.createdAt,
-        seriesTitle: series.title,
-        coverImage: series.coverImage || "",
-        audioUrl: ep.audioUrl,
-        episodeTitle: ep.title || "",
+        createdAt: iso(s.createdAt),
+        seriesTitle: parent.title, coverImage: parent.coverImage || "",
+        audioUrl: ep.audioUrl, episodeTitle: ep.title || "",
         liked: !!userId && likedBy.includes(userId),
+        saved: !!userId && savedBy.includes(userId),
       });
     }
 
@@ -79,8 +69,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/shorts — admin only. Creates a clip from an existing episode.
-// Body: { seriesId, episodeId, startSec, endSec, caption, creatorHandle? }
+// POST /api/shorts — admin only.
 export async function POST(req: NextRequest) {
   const denied = requireAdmin(req);
   if (denied) return denied;
@@ -91,29 +80,25 @@ export async function POST(req: NextRequest) {
     const { seriesId, episodeId, startSec = 0, endSec } = body;
 
     if (!seriesId || !episodeId || typeof endSec !== "number") {
-      return NextResponse.json(
-        { error: "seriesId, episodeId and endSec are required" }, { status: 400 }
-      );
+      return NextResponse.json({ error: "seriesId, episodeId and endSec are required" }, { status: 400 });
     }
     if (endSec <= startSec) {
       return NextResponse.json({ error: "endSec must be after startSec" }, { status: 400 });
     }
 
-    // Validate the clip actually points at a real episode — otherwise
-    // it would silently vanish from the feed (GET skips orphans).
+    // Validate the clip points at a real episode, or it would silently
+    // never appear in the feed (GET skips orphans).
     const series = await SeriesModel.findById(seriesId).select("episodes._id").lean<any>();
     if (!series) return NextResponse.json({ error: "Series not found" }, { status: 404 });
-
-    const exists = (series.episodes || []).some((e: any) => e._id.toString() === episodeId);
-    if (!exists) return NextResponse.json({ error: "Episode not in that series" }, { status: 404 });
+    if (!(series.episodes || []).some((e: any) => idOf(e._id) === episodeId)) {
+      return NextResponse.json({ error: "Episode not in that series" }, { status: 404 });
+    }
 
     const doc = await ShortModel.create({
-      ...body,
-      startSec,
+      ...body, startSec,
       gradient: body.gradient || gradientFor(seriesId + episodeId),
     });
-
-    return NextResponse.json(doc, { status: 201 });
+    return NextResponse.json({ _id: idOf(doc._id), ok: true }, { status: 201 });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }

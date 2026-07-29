@@ -1,28 +1,38 @@
 import { NotificationModel } from "@/models/Notification";
-import { pusherServer } from "@/lib/pusherServer";
+import { NotificationCategory } from "@/types";
 
-// Shared helper: create a notification doc and push it live over Pusher.
-// Used by the follow-request/follow-response routes (and anywhere else
-// that needs to notify a user) so the creation + push logic lives in
-// exactly one place.
-export async function notifyUser(userId: string, data: {
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+export interface NotifyInput {
   type: string;
-  message: string;
+  category?: NotificationCategory;
+  title: string;
+  message?: string;
   link?: string;
   fromUserId?: string;
   fromUserName?: string;
-}) {
-  const notification = await NotificationModel.create({ userId, ...data });
-  const payload = {
-    _id: notification._id.toString(),
-    type: data.type,
-    message: data.message,
-    link: data.link,
-    fromUserId: data.fromUserId,
-    fromUserName: data.fromUserName,
-    read: false,
-    createdAt: notification.createdAt,
-  };
-  pusherServer.trigger(`user-${userId}`, "notification", payload).catch(() => {});
-  return payload;
+}
+
+/**
+ * Write a notification for a user.
+ *
+ * Swallows its own errors on purpose: a notification is a side effect
+ * of some other action (a follow, a reply, a reward), and failing to
+ * record it must never fail the action that triggered it.
+ */
+export async function notifyUser(userId: string, input: NotifyInput): Promise<void> {
+  try {
+    await NotificationModel.create({
+      userId,
+      category: input.category ?? "system",
+      type: input.type,
+      title: input.title,
+      message: input.message ?? "",
+      link: input.link,
+      fromUserId: input.fromUserId,
+      fromUserName: input.fromUserName,
+    });
+  } catch {
+    /* intentionally silent — see above */
+  }
 }

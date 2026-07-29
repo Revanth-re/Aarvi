@@ -1,14 +1,46 @@
 import { Schema, models, model } from "mongoose";
 import { applyBaseSchema } from "@/lib/db/baseSchemaPlugin";
 
-const PlaylistItemSchema = new Schema(
-  {
-    seriesId:  { type: String, required: true },
-    episodeId: { type: String },
-    addedAt:   { type: Date, default: Date.now },
+// Mirrors UserSettings in types/index.ts. Kept as a sub-document with
+// per-field defaults (rather than a loose object) so an existing user
+// who has never opened Settings still reads back a complete, valid
+// settings object instead of undefined.
+const SettingsSchema = new Schema({
+  themeColor:  { type: String, enum: ["lavender","rosegold","mint","cyberblue","peach","midnight"], default: "lavender" },
+  themeMode:   { type: String, enum: ["light","dark","system"], default: "light" },
+  tabBarStyle: { type: String, enum: ["transparent","normal"], default: "transparent" },
+
+  notif: {
+    episodeDrops:   { type: Boolean, default: true },
+    creatorStories: { type: Boolean, default: true },
+    coinRewards:    { type: Boolean, default: true },
+    thoughtReplies: { type: Boolean, default: true },
+    weeklyRecap:    { type: Boolean, default: false },
   },
-  { _id: false }
-);
+  playback: {
+    autoplayNext: { type: Boolean, default: true },
+    skipIntro:    { type: Boolean, default: true },
+    fadeOnSleep:  { type: Boolean, default: true },
+    dataSaver:    { type: Boolean, default: false },
+  },
+  // Minutes. 0 = off, -1 = "end of episode".
+  sleepTimerDefault: { type: Number, default: 0 },
+  downloads: {
+    wifiOnly:         { type: Boolean, default: true },
+    autoDownloadNext: { type: Boolean, default: false },
+  },
+  privacy: {
+    privateListening: { type: Boolean, default: false },
+    allowMessages:    { type: Boolean, default: true },
+    publicThoughts:   { type: Boolean, default: true },
+  },
+}, { _id: false });
+
+const PlaylistItemSchema = new Schema({
+  seriesId:  { type: String, required: true },
+  episodeId: { type: String },
+  addedAt:   { type: Date, default: Date.now },
+}, { _id: false });
 
 const PlaylistSchema = new Schema({
   name:      { type: String, required: true, trim: true },
@@ -17,82 +49,67 @@ const PlaylistSchema = new Schema({
 });
 
 const UserSchema = new Schema({
-  googleId:  { type: String, unique: true, sparse: true },
-  email:     { type: String, required: true, unique: true },
-  name:      { type: String },
-  image:     { type: String },
-  favorites: [{ type: String }],  // series ids
+  googleId: { type: String, unique: true, sparse: true },
+  email:    { type: String, required: true, unique: true },
+  name:     { type: String },
+  image:    { type: String },
 
+  // @handle shown across the app. Sparse-unique so the many existing
+  // users without one don't all collide on null.
+  handle: { type: String, unique: true, sparse: true, trim: true, lowercase: true },
+  bio:    { type: String, default: "", maxlength: 160 },
+
+  /** Unlocks Creator Studio. */
+  isCreator: { type: Boolean, default: false },
+
+  /** Preferred catalog languages, used by Discover's language filter. */
+  languages: [{ type: String }],
+
+  favorites: [{ type: String }],
   playlists: [PlaylistSchema],
 
-  // Accepted follows: people THIS user follows. A user's "followers"
-  // are never stored directly — they're computed on read as
-  // "everyone whose `following` array contains this user's id".
-  // That keeps the two always in sync with zero migration risk.
-  following: [{ type: String }],
-
-  // Instagram-style follow requests: following someone doesn't take
-  // effect until they accept. `followRequestsReceived` holds the IDs
-  // of people who've asked to follow this user; `followRequestsSent`
-  // mirrors that on the requester's own doc so the client can render
-  // a "Requested" button state without an extra fetch.
+  // Accepted follows. A user's followers are never stored directly —
+  // they're computed as "everyone whose `following` contains this id",
+  // which keeps the two sides permanently in sync.
+  following:              [{ type: String }],
   followRequestsReceived: [{ type: String }],
   followRequestsSent:     [{ type: String }],
 
-  // RBAC (see models/Role.ts, models/Permission.ts, lib/rbac.ts): ids
-  // of Role documents granted to this user. Empty by default — the
-  // legacy env-based admin allow-list (lib/admin.ts) still works
-  // unchanged as a super-admin bypass, so nothing breaks while roles
-  // get adopted incrementally.
   roles: [{ type: String }],
 
-  // ─── Gamification (see lib/gamification.ts for all the rules) ───
-  // All of these are additive with safe defaults, so every existing
-  // user document keeps working without a migration: a missing field
-  // reads as 0 / "" / [], which is exactly "brand new player".
+  settings: { type: SettingsSchema, default: () => ({}) },
 
-  /** Spendable soft currency. Ledger of changes: models/CoinTx.ts. */
-  coins: { type: Number, default: 0 },
-
-  /** Lifetime seconds listened — drives hours + listener level. */
+  // ─── Gamification (rules live in lib/gamification.ts) ───
+  coins:         { type: Number, default: 0 },
   listenSeconds: { type: Number, default: 0 },
-
-  /** Consecutive days with at least one listen. */
   streak:        { type: Number, default: 0 },
   longestStreak: { type: Number, default: 0 },
 
-  // Stored as a "YYYY-MM-DD" string in IST rather than a Date, on
-  // purpose: streaks are a *calendar-day* concept, and comparing day
-  // strings avoids the timezone drift you get comparing timestamps on
-  // a server that might run in UTC.
+  // "YYYY-MM-DD" in IST, not a Date: streaks are a calendar-day concept
+  // and comparing day strings avoids timezone drift on a UTC server.
   lastListenDate: { type: String, default: "" },
+  /** Day the +10 daily reward was last claimed. */
+  lastDailyClaim: { type: String, default: "" },
+  /** Rewarded ads watched, and the day that count belongs to. */
+  adsWatchedDate:  { type: String, default: "" },
+  adsWatchedCount: { type: Number, default: 0 },
 
-  /** Earned badge keys — see BADGES in lib/gamification.ts. */
-  badges: [{ type: String }],
+  badges:          [{ type: String }],
+  shortsLiked:     { type: Number, default: 0 },
+  seriesCompleted: { type: Number, default: 0 },
+  nightOwl:        { type: Boolean, default: false },
 
-  /** Counters that only exist to unlock badges. */
-  shortsLiked:      { type: Number, default: 0 },
-  seriesCompleted:  { type: Number, default: 0 },
-  /** Set once the user has listened between 00:00–04:00 IST. */
-  nightOwl: { type: Boolean, default: false },
-
-  /** Squad._id, if this user is in a squad streak group. */
-  squadId: { type: String },
-
-  // Locked episodes this user has bought with coins, as
-  // "<seriesId>:<episodeId>" keys. Stored per-user on purpose: setting
-  // `isLocked = false` on the series document would unlock the episode
-  // for every user at once.
+  /** "<seriesId>:<episodeId>" keys bought with coins. Per-user on
+   *  purpose: flipping isLocked on the series would unlock it for all. */
   unlockedEpisodes: [{ type: String }],
 
-  /** Premium access expiry. Null/absent/past = free tier. */
-  premiumUntil: { type: Date, default: null },
+  /** Who invited this user, so the referral bonus pays exactly once. */
+  invitedBy:     { type: String, default: "" },
+  inviteRewarded:{ type: Boolean, default: false },
 
   createdAt: { type: Date, default: Date.now },
 });
 
-// Enterprise base fields: publicId, status, visibility, audit
-// (createdBy/updatedBy/deletedBy), soft delete, schemaVersion.
 applyBaseSchema(UserSchema, { visibilityDefault: "private" });
 
 export const UserModel = models.User ?? model("User", UserSchema);

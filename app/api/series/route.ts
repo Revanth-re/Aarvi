@@ -3,7 +3,7 @@ import { connectDB } from "@/lib/mongodb";
 import { SeriesModel } from "@/models/Series";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { processEpisodeTranscripts } from "@/lib/gemini";
-import { MOOD_BY_KEY } from "@/lib/gamification";
+import { VIBES } from "@/types";
 
 // Give transcript generation (Gemini upload + processing) room to run
 // before the platform's default serverless timeout kicks in. Actual
@@ -19,25 +19,28 @@ export async function GET(req: NextRequest) {
     if (p.get("genre") && p.get("genre") !== "All") q.genre = p.get("genre");
     if (p.get("featured") === "true") q.isFeatured = true;
     if (p.get("trending") === "true") q.isTrending = true;
+    if (p.get("language") && p.get("language") !== "All") q.language = p.get("language");
+    // Creator Studio lists only what this account published.
+    if (p.get("creatorId")) q.creatorId = p.get("creatorId");
     if (p.get("search")) {
       const rx = new RegExp(p.get("search")!, "i");
       q.$or = [{ title: rx }, { description: rx }, { tags: { $in: [rx] } }];
     }
 
-    // Mood filter (home screen's "What's your mood tonight?"). A mood
-    // maps to a handful of keywords which are matched against BOTH the
-    // genre and the tags, so it works whether a show was filed under
-    // the Horror genre or merely tagged "horror".
-    const mood = p.get("mood");
-    if (mood && mood !== "all") {
-      const def = MOOD_BY_KEY[mood];
+    // Vibe filter (Discover's "tell us the vibe" picker). A vibe maps
+    // to a handful of keywords matched against BOTH genre and tags, so
+    // it works whether a show was tagged explicitly or just happens to
+    // be the right genre.
+    const vibe = p.get("vibe");
+    if (vibe) {
+      const def = VIBES.find(v => v.key === vibe);
       if (def) {
-        const rxs = def.match.map(m => new RegExp(m, "i"));
-        const moodOr = [{ genre: { $in: rxs } }, { tags: { $in: rxs } }];
-        // Combine with $and so a mood + search request doesn't have one
+        const rxs = def.match.map((m: string) => new RegExp(m, "i"));
+        const vibeOr = [{ vibes: vibe }, { genre: { $in: rxs } }, { tags: { $in: rxs } }];
+        // Combined with $and so a vibe + search request doesn't have one
         // $or silently overwrite the other.
-        if (q.$or) { q.$and = [{ $or: q.$or }, { $or: moodOr }]; delete q.$or; }
-        else q.$or = moodOr;
+        if (q.$or) { q.$and = [{ $or: q.$or }, { $or: vibeOr }]; delete q.$or; }
+        else q.$or = vibeOr;
       }
     }
 

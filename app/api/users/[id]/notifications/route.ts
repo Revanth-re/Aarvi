@@ -1,50 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { NotificationModel } from "@/models/Notification";
-import { pusherServer } from "@/lib/pusherServer";
+import { idOf, iso } from "@/lib/serialize";
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 type P = { params: Promise<{ id: string }> };
 
-// GET: most recent notifications for this user (newest first).
-export async function GET(_: NextRequest, { params }: P) {
+// GET /api/users/[id]/notifications?category=all|drops|social|coins
+//
+// The tab filter is a database query rather than client-side filtering
+// of an "all" payload, so a busy account doesn't ship hundreds of rows
+// to render five.
+export async function GET(req: NextRequest, { params }: P) {
   try {
     await connectDB();
     const { id } = await params;
-    const notifications = await NotificationModel.find({ userId: id })
-      .sort({ createdAt: -1 })
-      .limit(30)
-      .lean();
+    const category = req.nextUrl.searchParams.get("category") || "all";
+
+    const q: any = { userId: id };
+    if (category !== "all") q.category = category;
+
+    const rows = await NotificationModel.find(q).sort({ createdAt: -1 }).limit(60).lean<any[]>();
+    const unread = await NotificationModel.countDocuments({ userId: id, read: false });
+
     return NextResponse.json({
-      notifications: notifications.map(n => ({ ...n, _id: n._id.toString() })),
+      unread,
+      notifications: rows.map(n => ({
+        _id: idOf(n._id),
+        type: n.type,
+        category: n.category || "system",
+        title: n.title || n.message || "",
+        message: n.message || "",
+        link: n.link || "",
+        fromUserId: n.fromUserId, fromUserName: n.fromUserName,
+        read: !!n.read,
+        createdAt: iso(n.createdAt),
+      })),
     });
-  } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }
-}
-
-// POST: create a notification for this user, and push it live via
-// Pusher so it shows up instantly if they're online right now.
-// Body: { type, message, link?, fromUserId?, fromUserName? }
-export async function POST(req: NextRequest, { params }: P) {
-  try {
-    await connectDB();
-    const { id } = await params;
-    const { type, message, link, fromUserId, fromUserName } = await req.json();
-
-    if (!type || !message) {
-      return NextResponse.json({ error: "type and message are required" }, { status: 400 });
-    }
-
-    const notification = await NotificationModel.create({
-      userId: id, type, message, link, fromUserId, fromUserName,
-    });
-
-    const payload = {
-      _id: notification._id.toString(),
-      type, message, link, fromUserId, fromUserName,
-      read: false, createdAt: notification.createdAt,
-    };
-
-    pusherServer.trigger(`user-${id}`, "notification", payload).catch(() => {});
-
-    return NextResponse.json({ ok: true, notification: payload });
-  } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 });
+  }
 }

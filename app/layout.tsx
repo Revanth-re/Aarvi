@@ -1,29 +1,47 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import ClientRoot from "@/components/ui/ClientRoot";
+import ClientRoot from "@/components/shell/ClientRoot";
 import { fontDisplay } from "@/lib/fonts";
 
 export const metadata: Metadata = {
-  title: "Aarvi — Audio Stories & Series",
-  description: "Immersive audio stories, FM series, and exclusive merchandise.",
+  title: "SWARA FM — Audio stories, in your language",
+  description: "Audio drama, shorts and thoughts. Listen, react, collect.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  // The app is a full-screen phone UI; letting it zoom breaks the
+  // fixed tab bar and the full-bleed Shorts feed.
+  maximumScale: 1,
+  themeColor: "#8B5CF6",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="midnight-dark" suppressHydrationWarning className={fontDisplay.variable}>
+    <html lang="en" data-theme="lavender-light" suppressHydrationWarning className={fontDisplay.variable}>
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous"/>
-        <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-        <script dangerouslySetInnerHTML={{__html:`
+        <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+        {/* Applies the saved theme before first paint. Without this the
+            app flashes the default lavender-light for one frame on
+            every load for anyone using a different palette or dark mode. */}
+        <script dangerouslySetInnerHTML={{ __html: `
           try {
-            var s = localStorage.getItem('naad-app');
-            var t = s ? JSON.parse(s).state?.theme : null;
-            var valid = ['midnight-dark','midnight-light','forest-dark','forest-light','desert-dark','desert-light','ocean-dark','ocean-light','rose-dark','rose-light','mono-dark','mono-light'];
-            document.documentElement.setAttribute('data-theme', (t && valid.includes(t)) ? t : 'midnight-dark');
-          } catch(e) {
-            document.documentElement.setAttribute('data-theme', 'midnight-dark');
+            var s = JSON.parse(localStorage.getItem('swara-app') || '{}').state || {};
+            var set = s.settings || {};
+            var color = set.themeColor || 'lavender';
+            var mode = set.themeMode || 'light';
+            if (mode === 'system') {
+              mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            var colors = ['lavender','rosegold','mint','cyberblue','peach','midnight'];
+            if (colors.indexOf(color) < 0) color = 'lavender';
+            if (mode !== 'dark' && mode !== 'light') mode = 'light';
+            document.documentElement.setAttribute('data-theme', color + '-' + mode);
+          } catch (e) {
+            document.documentElement.setAttribute('data-theme', 'lavender-light');
           }
         `}}/>
       </head>

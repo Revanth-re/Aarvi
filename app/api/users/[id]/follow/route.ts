@@ -51,7 +51,9 @@ export async function POST(req: NextRequest, { params }: P) {
 
       await notifyUser(targetId, {
         type: "follow_request",
-        message: `${actor.name || "Someone"} wants to follow you`,
+        category: "social",
+        title: `${actor.name || "Someone"} wants to follow you`,
+        message: "Tap to review the request.",
         link: "/profile?tab=requests",
         fromUserId: id,
         fromUserName: actor.name,

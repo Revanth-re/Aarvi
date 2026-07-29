@@ -1,76 +1,111 @@
-import { BadgeDef, CoinPack, Mood } from "@/types";
+import { CoinPack, DnaSlice } from "@/types";
 
-// ══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
 // Calendar days
-// ══════════════════════════════════════════════════════════════
-// Streaks are a *calendar day* concept, so every day boundary in this
-// file is computed in a single fixed timezone rather than in the
-// server's local time. Otherwise a Vercel function running in UTC and
-// a user in India disagree about when "today" ends, and streaks break
-// at 5:30am for everyone.
-export const STREAK_TIMEZONE = "Asia/Kolkata";
+// ══════════════════════════════════════════════════════════
+// Streaks and "resets at midnight" limits are calendar-day concepts,
+// so every day boundary is computed in one fixed timezone rather than
+// the server's local time. Otherwise a function running in UTC and a
+// user in India disagree about when today ends, and streaks break at
+// 5:30am for everyone.
+export const APP_TIMEZONE = "Asia/Kolkata";
 
-/** "YYYY-MM-DD" for the given instant, in STREAK_TIMEZONE. */
+/** "YYYY-MM-DD" for the given instant, in APP_TIMEZONE. */
 export function dayKey(d: Date = new Date()): string {
-  // en-CA formats as YYYY-MM-DD, which sorts and compares lexically.
+  // en-CA formats as YYYY-MM-DD, which compares correctly as a string.
   return new Intl.DateTimeFormat("en-CA", {
-    timeZone: STREAK_TIMEZONE,
-    year: "numeric", month: "2-digit", day: "2-digit",
+    timeZone: APP_TIMEZONE, year: "numeric", month: "2-digit", day: "2-digit",
   }).format(d);
 }
 
-/** Hour 0–23 for the given instant, in STREAK_TIMEZONE. */
+/** Hour 0–23 for the given instant, in APP_TIMEZONE. */
 export function hourOfDay(d: Date = new Date()): number {
-  return parseInt(
-    new Intl.DateTimeFormat("en-GB", {
-      timeZone: STREAK_TIMEZONE, hour: "2-digit", hour12: false,
-    }).format(d),
-    10
-  );
+  return parseInt(new Intl.DateTimeFormat("en-GB", {
+    timeZone: APP_TIMEZONE, hour: "2-digit", hour12: false,
+  }).format(d), 10);
 }
 
 /** The day key N days before the given one. */
 export function previousDayKey(key: string, back = 1): string {
   const [y, m, d] = key.split("-").map(Number);
-  // Anchored at noon UTC so a DST/offset shift can never push the
-  // arithmetic onto the wrong calendar day.
-  const t = Date.UTC(y, m - 1, d, 12) - back * 86_400_000;
-  return dayKey(new Date(t));
+  // Anchored at noon UTC so a DST/offset shift can't land on the wrong day.
+  return dayKey(new Date(Date.UTC(y, m - 1, d, 12) - back * 86_400_000));
 }
 
-// ══════════════════════════════════════════════════════════════
-// Listener levels
-// ══════════════════════════════════════════════════════════════
-// Cumulative *hours listened* required to reach each level. Index 0 is
-// level 1, so a brand-new account is "Level 1 Listener", not level 0.
-export const LEVEL_THRESHOLDS_HOURS = [0, 1, 3, 8, 15, 30, 60, 100, 175, 300, 500];
+// ══════════════════════════════════════════════════════════
+// Streaks
+// ══════════════════════════════════════════════════════════
+export interface StreakResult {
+  streak: number; longestStreak: number; incrementedToday: boolean;
+}
 
+/**
+ * Pure streak transition:
+ *   same day  → unchanged (idempotent — call it as often as you like)
+ *   yesterday → +1
+ *   older/never → reset to 1 (today still counts)
+ */
+export function advanceStreak(
+  lastDate: string, streak: number, longest: number, today: string = dayKey()
+): StreakResult {
+  if (lastDate === today) return { streak, longestStreak: longest, incrementedToday: false };
+  const next = lastDate === previousDayKey(today) ? streak + 1 : 1;
+  return { streak: next, longestStreak: Math.max(longest, next), incrementedToday: true };
+}
+
+// ── Home strip: "Streak day 4 · unlocks a free episode at day 7" ──
+export const FREE_EPISODE_AT_STREAK = 7;
+/** Minutes of listening the daily goal asks for. */
+export const DAILY_GOAL_MINUTES = 20;
+/** Coins paid for hitting the daily goal. */
+export const DAILY_GOAL_COINS = 40;
+
+// ══════════════════════════════════════════════════════════
+// Coin economy
+// ══════════════════════════════════════════════════════════
+export const COINS_DAILY_CLAIM = 10;      // "Claim daily reward"
+export const COINS_PER_AD      = 20;      // "Watch a short ad"
+export const MAX_ADS_PER_DAY   = 5;       // stops the ad button being a coin printer
+export const COINS_PER_INVITE  = 100;     // paid when the invitee finishes ep 1
+export const UNLOCK_EPISODE_COST = 50;
+export const COINS_PER_STREAK_DAY = 2;
+export const MAX_STREAK_BONUS_DAYS = 10;
+
+export function dailyGoalReward(streak: number): number {
+  return DAILY_GOAL_COINS
+    + Math.min(streak, MAX_STREAK_BONUS_DAYS) * COINS_PER_STREAK_DAY;
+}
+
+// Prices/bonuses match the Coins screen exactly.
+export const COIN_PACKS: CoinPack[] = [
+  { key: "p300",  coins: 300,  bonus: 0,   price: 49 },
+  { key: "p900",  coins: 900,  bonus: 80,  price: 129 },
+  { key: "p2200", coins: 2200, bonus: 300, price: 299 },
+  { key: "p5000", coins: 5000, bonus: 900, price: 599 },
+];
+
+// ══════════════════════════════════════════════════════════
+// Listener level
+// ══════════════════════════════════════════════════════════
+export const LEVEL_HOURS  = [0, 1, 3, 8, 15, 30, 60, 100, 175, 300, 500];
 export const LEVEL_TITLES = [
   "Newcomer", "Listener", "Regular", "Devotee", "Binger", "Enthusiast",
   "Aficionado", "Narrator", "Storykeeper", "Legend", "Immortal",
 ];
 
 export interface LevelInfo {
-  level: number;
-  title: string;
-  hours: number;
-  /** Hours required for the next level, or null at max level. */
-  nextLevelHours: number | null;
-  /** 0–1 progress toward the next level (1 at max level). */
-  progress: number;
+  level: number; title: string; hours: number;
+  nextLevelHours: number | null; progress: number;
 }
 
-export function levelFromSeconds(listenSeconds: number): LevelInfo {
-  const hours = listenSeconds / 3600;
-
+export function levelFromSeconds(sec: number): LevelInfo {
+  const hours = sec / 3600;
   let idx = 0;
-  for (let i = 0; i < LEVEL_THRESHOLDS_HOURS.length; i++) {
-    if (hours >= LEVEL_THRESHOLDS_HOURS[i]) idx = i;
-  }
+  for (let i = 0; i < LEVEL_HOURS.length; i++) if (hours >= LEVEL_HOURS[i]) idx = i;
 
-  const isMax = idx >= LEVEL_THRESHOLDS_HOURS.length - 1;
-  const floor = LEVEL_THRESHOLDS_HOURS[idx];
-  const next = isMax ? null : LEVEL_THRESHOLDS_HOURS[idx + 1];
+  const isMax = idx >= LEVEL_HOURS.length - 1;
+  const floor = LEVEL_HOURS[idx];
+  const next  = isMax ? null : LEVEL_HOURS[idx + 1];
 
   return {
     level: idx + 1,
@@ -81,161 +116,109 @@ export function levelFromSeconds(listenSeconds: number): LevelInfo {
   };
 }
 
-// ══════════════════════════════════════════════════════════════
-// Badges
-// ══════════════════════════════════════════════════════════════
-export const BADGES: BadgeDef[] = [
-  { key: "first_listen",  name: "First Listen",     description: "Played your first episode",              icon: "Play" },
-  { key: "streak_3",      name: "3-Day Streaker",   description: "Listened 3 days in a row",               icon: "Flame" },
-  { key: "streak_7",      name: "7-Day Streaker",   description: "Listened 7 days in a row",               icon: "Flame" },
-  { key: "streak_12",     name: "12-Day Streaker",  description: "Listened 12 days in a row",              icon: "Flame" },
-  { key: "streak_30",     name: "30-Day Streaker",  description: "A full month, every single day",         icon: "Flame" },
-  { key: "night_owl",     name: "Night Owl",        description: "Listened between midnight and 4am",      icon: "Moon" },
-  { key: "ten_hours",     name: "10 Hours In",      description: "Listened for 10 hours total",            icon: "Headphones" },
-  { key: "top_listener",  name: "Top 1% Listener",  description: "Listened for 100 hours total",           icon: "Crown" },
-  { key: "beam_star",     name: "Beam Star",        description: "Kept a squad streak alive for 7 days",   icon: "Sparkles" },
-  { key: "shorts_fan",    name: "Shorts Fan",       description: "Liked 25 shorts",                        icon: "Heart" },
-  { key: "collector",     name: "Collector",        description: "Saved 10 series to your favorites",      icon: "Bookmark" },
-  { key: "completionist", name: "Completionist",    description: "Finished every episode of a series",     icon: "CheckCircle2" },
-];
+// ══════════════════════════════════════════════════════════
+// Listening DNA
+// ══════════════════════════════════════════════════════════
+/**
+ * Turn per-genre listening seconds into the percentage bars on the
+ * profile. Percentages are rounded, then the largest slice absorbs the
+ * rounding drift so the bars always total exactly 100 — otherwise you
+ * get a profile that visibly adds up to 99%.
+ */
+export function listeningDna(byGenre: Record<string, number>, top = 4): DnaSlice[] {
+  const total = Object.values(byGenre).reduce((a, b) => a + b, 0);
+  if (total <= 0) return [];
 
-export const BADGE_BY_KEY: Record<string, BadgeDef> =
-  Object.fromEntries(BADGES.map(b => [b.key, b]));
+  const sorted = Object.entries(byGenre)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, top);
 
-/** Coins granted the first time a badge is earned. */
-export const BADGE_REWARD_COINS = 50;
+  const subtotal = sorted.reduce((a, [, v]) => a + v, 0);
+  const slices = sorted.map(([genre, v]) => ({
+    genre, percent: Math.round((v / subtotal) * 100),
+  }));
 
-export interface BadgeContext {
-  streak: number;
-  listenSeconds: number;
-  nightOwl: boolean;
-  shortsLiked: number;
-  favoritesCount: number;
-  seriesCompleted: number;
-  squadStreak: number;
+  const drift = 100 - slices.reduce((a, s) => a + s.percent, 0);
+  if (slices.length && drift !== 0) slices[0].percent += drift;
+
+  return slices;
 }
 
+// ══════════════════════════════════════════════════════════
+// Presentation
+// ══════════════════════════════════════════════════════════
 /**
- * Pure function: given the user's counters, which badge keys *should*
- * they have? Callers diff this against what's stored and award the
- * difference — which means badges self-heal if a counter is corrected
- * later, and re-running it is always safe.
+ * Compact counts, matching the design exactly: "18.4M", "128.4K", "1,284".
+ *
+ * Two deliberate choices:
+ *  • One decimal is always kept for K/M — the mocks show 42.1M and
+ *    110.2K, so truncating large values to "42M" would be wrong.
+ *  • Abbreviation only starts at 10,000, so a thought with 1,284 likes
+ *    reads "1,284" rather than a vaguer "1.3K".
  */
-export function earnedBadges(ctx: BadgeContext): string[] {
-  const hours = ctx.listenSeconds / 3600;
-  const out: string[] = [];
+export function formatCount(n: number): string {
+  if (!Number.isFinite(n)) return "0";
+  const abs = Math.abs(n);
 
-  if (ctx.listenSeconds > 0)   out.push("first_listen");
-  if (ctx.streak >= 3)         out.push("streak_3");
-  if (ctx.streak >= 7)         out.push("streak_7");
-  if (ctx.streak >= 12)        out.push("streak_12");
-  if (ctx.streak >= 30)        out.push("streak_30");
-  if (ctx.nightOwl)            out.push("night_owl");
-  if (hours >= 10)             out.push("ten_hours");
-  if (hours >= 100)            out.push("top_listener");
-  if (ctx.squadStreak >= 7)    out.push("beam_star");
-  if (ctx.shortsLiked >= 25)   out.push("shorts_fan");
-  if (ctx.favoritesCount >= 10) out.push("collector");
-  if (ctx.seriesCompleted >= 1) out.push("completionist");
+  if (abs >= 1_000_000) return trimZero(n / 1_000_000) + "M";
+  if (abs >= 10_000)    return trimZero(n / 1_000) + "K";
+  return Math.round(n).toLocaleString("en-IN");
+}
 
+/** 18.4 → "18.4", 18.0 → "18" — no trailing ".0". */
+function trimZero(v: number): string {
+  const s = v.toFixed(1);
+  return s.endsWith(".0") ? s.slice(0, -2) : s;
+}
+
+/** "6:12" — used for thought timestamps and episode positions. */
+export function formatTime(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+/** "2h", "5m", "1d" — relative time for feeds and notifications. */
+export function timeAgo(iso: string | Date): string {
+  const then = typeof iso === "string" ? new Date(iso).getTime() : iso.getTime();
+  const diff = Math.max(0, Date.now() - then) / 1000;
+  if (diff < 60)     return `${Math.floor(diff)}s`;
+  if (diff < 3600)   return `${Math.floor(diff / 60)}m`;
+  if (diff < 86400)  return `${Math.floor(diff / 3600)}h`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)}d`;
+  return `${Math.floor(diff / 604800)}w`;
+}
+
+/** Deterministic gradient for a string — same seed, same colours. */
+export function gradientFor(seed: string): string {
+  const PAIRS = [
+    ["#B06AB3", "#4568DC"], ["#1F9E8F", "#0D5F6E"], ["#F0563C", "#C94BA0"],
+    ["#8B5CF6", "#C4A6F5"], ["#5B8DEF", "#9B6BF5"], ["#E05A2B", "#F0A13C"],
+    ["#22C55E", "#0EA5E9"], ["#F43F5E", "#8B5CF6"],
+  ];
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = seed.charCodeAt(i) + ((h << 5) - h);
+  const [a, b] = PAIRS[Math.abs(h) % PAIRS.length];
+  return `linear-gradient(160deg,${a},${b})`;
+}
+
+/** Deterministic waveform bar heights (22 bars, 22–99%). */
+export function waveformBars(seed: string, count = 22): number[] {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = seed.charCodeAt(i) + ((h << 5) - h);
+  let state = Math.abs(h) || 1;
+  const out: number[] = [];
+  for (let i = 0; i < count; i++) {
+    state = (state * 1103515245 + 12345) & 0x7fffffff;
+    out.push(22 + (state % 78));
+  }
   return out;
 }
 
-// ══════════════════════════════════════════════════════════════
-// Streaks
-// ══════════════════════════════════════════════════════════════
-export interface StreakResult {
-  streak: number;
-  longestStreak: number;
-  /** True only on the transition — used to decide whether to pay out. */
-  incrementedToday: boolean;
-}
-
-/**
- * Pure streak transition. Three cases:
- *   • same day  → no change (idempotent; call it as often as you like)
- *   • yesterday → +1
- *   • older/never → reset to 1 (today still counts)
- */
-export function advanceStreak(
-  lastListenDate: string,
-  streak: number,
-  longestStreak: number,
-  today: string = dayKey()
-): StreakResult {
-  if (lastListenDate === today) {
-    return { streak, longestStreak, incrementedToday: false };
-  }
-  const next = lastListenDate === previousDayKey(today) ? streak + 1 : 1;
-  return {
-    streak: next,
-    longestStreak: Math.max(longestStreak, next),
-    incrementedToday: true,
-  };
-}
-
-// ══════════════════════════════════════════════════════════════
-// Coin economy (soft currency — no real money, see WALLET note)
-// ══════════════════════════════════════════════════════════════
-export const COINS_PER_CHECKIN = 10;
-/** Extra coins per streak day, capped so long streaks don't runaway. */
-export const COINS_PER_STREAK_DAY = 2;
-export const MAX_STREAK_BONUS_DAYS = 10;
-/** Cost to unlock one locked episode with coins. */
-export const UNLOCK_EPISODE_COST = 50;
-/** Paid out to every member on a day the whole squad checks in. */
-export const SQUAD_BONUS_COINS = 25;
-
-export function checkinReward(streak: number): number {
-  return COINS_PER_CHECKIN
-    + Math.min(streak, MAX_STREAK_BONUS_DAYS) * COINS_PER_STREAK_DAY;
-}
-
-// Coin packs are intentionally NOT wired to a payment provider. The
-// purchase route is a stub that refuses to grant coins unless the app
-// is explicitly in demo mode — see app/api/users/[id]/wallet/route.ts.
-export const COIN_PACKS: CoinPack[] = [
-  { key: "starter", coins: 500,  price: 49 },
-  { key: "popular", coins: 1200, price: 99,  bonus: "+20% bonus" },
-  { key: "mega",    coins: 3000, price: 199, bonus: "+50% bonus" },
-];
-
-// ══════════════════════════════════════════════════════════════
-// Moods
-// ══════════════════════════════════════════════════════════════
-// `match` entries are matched case-insensitively against a series'
-// genre AND its tags, so a mood works whether you tagged a show
-// "horror" or filed it under the Horror genre.
-export const MOODS: Mood[] = [
-  { key: "heartbroken", label: "Heartbroken", emoji: "💔", match: ["romance", "drama", "heartbreak", "love"] },
-  { key: "hyped",       label: "Hyped",       emoji: "⚡", match: ["thriller", "action", "adventure", "cyber"] },
-  { key: "spooked",     label: "Spook me",    emoji: "🕷️", match: ["horror", "paranormal", "supernatural"] },
-  { key: "chill",       label: "Chill",       emoji: "🌙", match: ["slice of life", "comedy", "feel good", "calm"] },
-  { key: "nostalgic",   label: "Nostalgic",   emoji: "📻", match: ["folklore", "historical", "classic", "mythology"] },
-  { key: "curious",     label: "Curious",     emoji: "🔍", match: ["true crime", "mystery", "sci-fi", "documentary"] },
-];
-
-export const MOOD_BY_KEY: Record<string, Mood> =
-  Object.fromEntries(MOODS.map(m => [m.key, m]));
-
-// ══════════════════════════════════════════════════════════════
-// Presentation helpers
-// ══════════════════════════════════════════════════════════════
-export function formatCount(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
-  if (n >= 1_000)     return `${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}K`;
-  return String(n);
-}
-
-/** Deterministic gradient for a string — same series, same colors. */
-export function gradientFor(seed: string): string {
-  const PAIRS = [
-    ["#f0629a", "#e0703c"], ["#1f9e8f", "#0d5f6e"], ["#f0563c", "#c94ba0"],
-    ["#7c6af7", "#c9beff"], ["#5b8def", "#9b6bf5"], ["#e05a2b", "#f0a13c"],
-    ["#22c55e", "#0ea5e9"], ["#f43f5e", "#8b5cf6"],
-  ];
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) hash = seed.charCodeAt(i) + ((hash << 5) - hash);
-  const [a, b] = PAIRS[Math.abs(hash) % PAIRS.length];
-  return `linear-gradient(160deg,${a},${b})`;
+/** Turn a display name into a stable @handle. */
+export function handleFrom(name: string): string {
+  return name.toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, ".")
+    .replace(/^\.+|\.+$/g, "")
+    .slice(0, 24) || "listener";
 }
