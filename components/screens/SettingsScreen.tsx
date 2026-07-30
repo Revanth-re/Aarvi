@@ -35,12 +35,25 @@ export default function SettingsScreen() {
   // navigator/window during the server render would mismatch hydration.
   const [canPush, setCanPush] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
+  // Whether THIS device actually has a live browser push subscription —
+  // separate from settings.notif.newMessages (which is just a DB flag
+  // that defaults to true and used to drive the toggle directly). That
+  // made the switch show "on" for everyone even though nobody had ever
+  // granted permission or registered a subscription, so lockscreen
+  // pushes silently never fired for anyone. The toggle now reflects
+  // reality: off until this device has actually subscribed.
+  const [pushOn, setPushOn] = useState(false);
   useEffect(() => {
     const supported = pushSupported();
     // Deferred a tick — setting state synchronously inside an effect's
     // body (vs. inside a callback like a .then()) can trigger a
     // cascading-render lint error; queueMicrotask sidesteps it cheaply.
     queueMicrotask(() => setCanPush(supported));
+    if (!supported) return;
+    navigator.serviceWorker.getRegistration()
+      .then(reg => reg?.pushManager.getSubscription())
+      .then(sub => queueMicrotask(() => setPushOn(!!sub)))
+      .catch(() => {});
   }, []);
 
   const togglePush = async (v: boolean) => {
@@ -63,6 +76,7 @@ export default function SettingsScreen() {
         await disablePush(user._id);
         showToast("Message notifications off", "info");
       }
+      setPushOn(v);
       setGroup("notif", { newMessages: v });
     } finally {
       setPushBusy(false);
@@ -161,7 +175,7 @@ export default function SettingsScreen() {
         {/* ── Notifications ── */}
         <Group icon={<Bell size={15}/>} title="Notifications" sub="What we ping you about">
           {canPush && user && (
-            <Toggle label="Push new messages to this device" on={settings.notif.newMessages} set={togglePush} disabled={pushBusy}/>
+            <Toggle label="Push new messages to this device" on={pushOn} set={togglePush} disabled={pushBusy}/>
           )}
           <Toggle label="New episode drops" on={settings.notif.episodeDrops} set={v => setGroup("notif", { episodeDrops: v })}/>
           <Toggle label="Creator stories & messages" on={settings.notif.creatorStories} set={v => setGroup("notif", { creatorStories: v })}/>
