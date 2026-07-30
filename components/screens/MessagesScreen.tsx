@@ -168,7 +168,13 @@ function MessagesScreenInner() {
     return (
       <>
         <TopBar title="Messages"/>
-        <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - var(--topbar-h))" }}>
+        {/* The fixed height here needs to subtract the bottom nav too,
+            not just the top bar — this view isn't wrapped in <Screen>
+            (which reserves that space via padding), so without it the
+            input row's own bottom-nav-height margin below pushed the
+            whole column taller than the actual visible viewport,
+            shoving the input bar down under/behind the fixed nav. */}
+        <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - var(--topbar-h) - var(--nav-h))" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
             <button onClick={() => setOpenWith(null)} aria-label="Back"
               style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text2)", display: "flex" }}>
@@ -253,7 +259,7 @@ function MessagesScreenInner() {
 
           <div style={{
             borderTop: "1px solid var(--border)",
-            marginBottom: "calc(var(--nav-h) + env(safe-area-inset-bottom, 0px))",
+            paddingBottom: "env(safe-area-inset-bottom, 0px)",
           }}>
             {showEmoji && (
               <div style={{
@@ -308,10 +314,19 @@ function MessagesScreenInner() {
               </button>
               <input className="inp" value={draft} onChange={e => setDraft(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-                placeholder="Message…" aria-label="Message"/>
+                placeholder="Message…" aria-label="Message" style={{ padding: "11px 16px" }}/>
+              {/* A fixed circular icon button, not the generic .btn class
+                  — .btn's default padding is horizontal-only when
+                  overridden for an icon-only button, which left this
+                  much shorter than the input beside it. */}
               <button onClick={send} disabled={busy || uploading || (!draft.trim() && !pendingAttachment)} aria-label="Send"
-                className="btn btn-primary" style={{ padding: "0 16px", flex: "none" }}>
-                <Send size={16}/>
+                style={{
+                  width: 44, height: 44, borderRadius: "50%", border: "none", flex: "none",
+                  background: "var(--grad)", color: "#fff", cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  opacity: (busy || uploading || (!draft.trim() && !pendingAttachment)) ? .55 : 1,
+                }}>
+                <Send size={18}/>
               </button>
             </div>
           </div>

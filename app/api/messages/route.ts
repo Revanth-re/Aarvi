@@ -4,6 +4,7 @@ import { ConversationModel, MessageModel, conversationKey } from "@/models/Conve
 import { UserModel } from "@/models/User";
 import { idOf, iso, publicUser } from "@/lib/serialize";
 import { sendPushToUser } from "@/lib/push";
+import { notifyUser } from "@/lib/notify";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -154,6 +155,24 @@ export async function POST(req: NextRequest) {
       } : {}),
     });
 
+    // Sender's name is needed for both the in-app bell and the push
+    // payload below, so it's fetched once regardless of the push toggle.
+    const sender = await UserModel.findById(userId).select("name").lean<any>();
+    const preview = msg.text || (msg.attachment?.kind === "video" ? "Sent a video" : msg.attachment ? "Sent a photo" : "New message");
+
+    // In-app notification bell — always shows new DMs, regardless of the
+    // recipient's push toggle (that toggle only controls whether it also
+    // buzzes their device; the bell itself should never miss a message).
+    await notifyUser(toId, {
+      type: "new_message",
+      category: "social",
+      title: sender?.name || "New message",
+      message: preview.length > 120 ? `${preview.slice(0, 117)}...` : preview,
+      link: `/messages?with=${userId}`,
+      fromUserId: userId,
+      fromUserName: sender?.name,
+    });
+
     // Device push notification — "if any messages sent by any other
     // people in app the notification should come in their notification
     // bar like WhatsApp/Insta." Respects the recipient's own toggle
@@ -164,8 +183,6 @@ export async function POST(req: NextRequest) {
     // actually reaches the push service — sendPushToUser itself never
     // throws, so this can't turn a push failure into a failed send.
     if (to.settings?.notif?.newMessages !== false) {
-      const sender = await UserModel.findById(userId).select("name").lean<any>();
-      const preview = msg.text || (msg.attachment?.kind === "video" ? "Sent a video" : msg.attachment ? "Sent a photo" : "New message");
       await sendPushToUser(toId, {
         title: sender?.name || "New message",
         body: preview.length > 120 ? `${preview.slice(0, 117)}...` : preview,

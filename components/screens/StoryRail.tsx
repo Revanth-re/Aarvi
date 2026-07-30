@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Plus, Mic, Image as ImageIcon, Quote, X, Send, EyeOff, Eye, Trash2, MoreVertical } from "lucide-react";
 import { StoryGroup, StoryKind } from "@/types";
 import { useApp, useToast } from "@/store";
-import { timeAgo } from "@/lib/gamification";
+import { timeAgo, gradientFor } from "@/lib/gamification";
 import { creatorFetch } from "@/lib/creatorFetch";
 import { Sheet } from "@/components/kit";
 import Avatar from "@/components/ui/Avatar";
@@ -454,33 +454,60 @@ function StoryViewer({
 
       <div
         onClick={() => { if (menuOpen) { setMenuOpen(false); return; } idx < localStories.length - 1 ? setIdx(idx + 1) : onClose(); }}
-        style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 22, padding: 28, cursor: "pointer" }}>
+        style={{ position: "relative", flex: 1, overflow: "hidden", cursor: "pointer" }}>
+
+        {/* Full-bleed backdrop, same idea as WhatsApp Status / Instagram
+            stories — a blurred, zoomed copy of the photo fills the whole
+            screen behind the sharp foreground image, and quote/audio
+            stories (no photo to work with) get a soft per-story gradient
+            instead of a flat dark fill, so nothing is ever just empty
+            letterboxing around a small centered image. */}
         {story.kind === "photo" && story.mediaUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={story.mediaUrl} alt="" style={{ maxWidth: "100%", maxHeight: "60vh", borderRadius: 18, objectFit: "contain" }}/>
+          <img src={story.mediaUrl} alt="" aria-hidden style={{
+            position: "absolute", inset: 0, width: "100%", height: "100%",
+            objectFit: "cover", filter: "blur(40px) brightness(.55)", transform: "scale(1.15)",
+          }}/>
         ) : (
-          <div style={{
-            width: 92, height: 92, borderRadius: "50%", background: "var(--grad)",
-            display: "flex", alignItems: "center", justifyContent: "center", color: "#fff",
-          }}>
-            <Icon size={34}/>
-          </div>
+          <div style={{ position: "absolute", inset: 0, background: gradientFor(story._id) }}/>
         )}
+        <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.22)" }}/>
 
-        {story.kind === "audio" && story.mediaUrl && (
-          <audio src={story.mediaUrl} controls autoPlay style={{ width: "100%", maxWidth: 320 }}
-            onClick={e => e.stopPropagation()}/>
-        )}
+        <div style={{
+          position: "relative", zIndex: 1, height: "100%",
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          gap: 22, padding: 28,
+        }}>
+          {story.kind === "photo" && story.mediaUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={story.mediaUrl} alt="" style={{
+              maxWidth: "100%", maxHeight: "70vh", borderRadius: 18, objectFit: "contain",
+              boxShadow: "0 12px 34px rgba(0,0,0,.45)",
+            }}/>
+          ) : (
+            <div style={{
+              width: 92, height: 92, borderRadius: "50%", background: "rgba(255,255,255,.2)",
+              backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff",
+            }}>
+              <Icon size={34}/>
+            </div>
+          )}
 
-        {story.caption && (
-          <p style={{
-            fontSize: story.kind === "quote" ? 21 : 15,
-            fontWeight: story.kind === "quote" ? 700 : 500,
-            color: "#fff", textAlign: "center", lineHeight: 1.5, margin: 0,
-          }}>
-            {story.caption}
-          </p>
-        )}
+          {story.kind === "audio" && story.mediaUrl && (
+            <audio src={story.mediaUrl} controls autoPlay style={{ width: "100%", maxWidth: 320 }}
+              onClick={e => e.stopPropagation()}/>
+          )}
+
+          {story.caption && (
+            <p style={{
+              fontSize: story.kind === "quote" ? 21 : 15,
+              fontWeight: story.kind === "quote" ? 700 : 500,
+              color: "#fff", textAlign: "center", lineHeight: 1.5, margin: 0,
+              textShadow: "0 1px 6px rgba(0,0,0,.4)",
+            }}>
+              {story.caption}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Reply → becomes a DM to the story's owner, not a public
