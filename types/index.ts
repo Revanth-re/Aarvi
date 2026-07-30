@@ -242,6 +242,11 @@ export interface StoryRef {
 export interface MessageAttachment {
   url: string; kind: "image" | "video";
 }
+/** A small snapshot of the message being replied to — quoted above the reply, same idea as Instagram/WhatsApp. */
+export interface MessageReplyTo {
+  messageId: string; senderId: string; text: string;
+  attachmentKind?: "image" | "video";
+}
 export interface MessageItem {
   _id: string; conversationId: string; senderId: string;
   text: string; createdAt: string; read: boolean;
@@ -249,6 +254,8 @@ export interface MessageItem {
   storyRef?: StoryRef;
   /** Present when the message carries an image/video/GIF instead of (or alongside) text. */
   attachment?: MessageAttachment;
+  /** Present when this message is a reply to another message in the thread. */
+  replyTo?: MessageReplyTo;
 }
 export interface Conversation {
   _id: string;

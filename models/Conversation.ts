@@ -35,6 +35,17 @@ const AttachmentSchema = new Schema({
   kind: { type: String, enum: ["image", "video"], required: true },
 }, { _id: false });
 
+// A denormalized snapshot of the message being replied to (Instagram/
+// WhatsApp-style quote reply) — stored at send time rather than joined
+// live, so a quoted reply still shows correctly even if the original
+// later gets deleted.
+const ReplyToSchema = new Schema({
+  messageId:      { type: String, required: true },
+  senderId:       { type: String, required: true },
+  text:           { type: String, default: "" },
+  attachmentKind: { type: String, enum: ["image", "video"] },
+}, { _id: false });
+
 const MessageSchema = new Schema({
   conversationId: { type: String, required: true, index: true },
   senderId:       { type: String, required: true },
@@ -44,6 +55,12 @@ const MessageSchema = new Schema({
   readBy:         [{ type: String }],
   storyRef:       { type: StoryRefSchema, default: undefined },
   attachment:     { type: AttachmentSchema, default: undefined },
+  replyTo:        { type: ReplyToSchema, default: undefined },
+  // Unsend, Instagram-style: the message vanishes from both sides
+  // rather than leaving a "this message was deleted" placeholder.
+  // Kept as a flag (not a hard delete) so a stray reference from
+  // someone else's replyTo snapshot doesn't break.
+  deleted:        { type: Boolean, default: false },
   createdAt:      { type: Date, default: Date.now, index: true },
 });
 

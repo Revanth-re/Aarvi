@@ -11,6 +11,20 @@ export function pushSupported(): boolean {
     && "Notification" in window;
 }
 
+// Shared with InstallPrompt.tsx and SettingsScreen.tsx so the two
+// "why isn't this working on my phone" explanations (install nudge,
+// push toggle) agree with each other instead of drifting.
+export function isIOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /iphone|ipad|ipod/i.test(navigator.userAgent);
+}
+
+export function isStandalone(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia?.("(display-mode: standalone)").matches
+    || (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+}
+
 // The Push API wants the VAPID public key as a Uint8Array, not the
 // base64url string it's normally shared as.
 function urlBase64ToUint8Array(base64: string): Uint8Array {

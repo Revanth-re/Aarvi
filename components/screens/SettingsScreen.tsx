@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Palette, Bell, Headphones, Timer, Download, Shield, Sun, Moon, Monitor, Layers, LogOut, UserX } from "lucide-react";
 import { ThemeMode, TabBarStyle, UserSettings } from "@/types";
 import { useApp, useDataCache, useToast } from "@/store";
-import { pushSupported, enablePush, disablePush } from "@/lib/push-client";
+import { pushSupported, enablePush, disablePush, isIOS, isStandalone } from "@/lib/push-client";
 import { Screen } from "@/components/kit";
 import TopBar from "@/components/shell/TopBar";
 
@@ -174,8 +174,20 @@ export default function SettingsScreen() {
 
         {/* ── Notifications ── */}
         <Group icon={<Bell size={15}/>} title="Notifications" sub="What we ping you about">
-          {canPush && user && (
-            <Toggle label="Push messages & follows to this device" on={pushOn} set={togglePush} disabled={pushBusy}/>
+          {user && (
+            canPush ? (
+              <Toggle label="Push messages & follows to this device" on={pushOn} set={togglePush} disabled={pushBusy}/>
+            ) : (
+              // Silently hiding this row when unsupported used to look
+              // like the feature just wasn't there — showing why is
+              // more useful, especially since the iOS case has an
+              // actual fix (add to home screen) rather than a dead end.
+              <div style={{ padding: "10px 14px 12px", fontSize: 11.5, color: "var(--text3)", lineHeight: 1.5 }}>
+                {isIOS() && !isStandalone()
+                  ? "Add SWARA FM to your Home Screen first (Profile → Download the app), then open it from there to turn on notifications — iOS doesn't allow push from a regular Safari tab."
+                  : "Notifications aren't available in this browser. Try opening SWARA FM in Chrome, or add it to your home screen first."}
+              </div>
+            )
           )}
           <Toggle label="New episode drops" on={settings.notif.episodeDrops} set={v => setGroup("notif", { episodeDrops: v })}/>
           <Toggle label="Creator stories & messages" on={settings.notif.creatorStories} set={v => setGroup("notif", { creatorStories: v })}/>

@@ -2,20 +2,9 @@
 import { useEffect, useState } from "react";
 import { Download, X, Share } from "lucide-react";
 import { useApp, useInstallPrompt, BeforeInstallPromptEvent } from "@/store";
-import { registerServiceWorker } from "@/lib/push-client";
+import { registerServiceWorker, isIOS, isStandalone } from "@/lib/push-client";
 
 const SEEN_KEY = "swara-install-seen";
-
-function isStandalone() {
-  if (typeof window === "undefined") return false;
-  return window.matchMedia?.("(display-mode: standalone)").matches
-    || (window.navigator as unknown as { standalone?: boolean }).standalone === true;
-}
-
-function isIOS() {
-  if (typeof navigator === "undefined") return false;
-  return /iphone|ipad|ipod/i.test(navigator.userAgent);
-}
 
 // Loopz-style "download our app" nudge, but for the web — there's no
 // native app to download here, so "installing" means adding this PWA
@@ -127,12 +116,40 @@ export default function InstallPrompt() {
             style={{ width: "100%", justifyContent: "center", padding: "12px 0", fontSize: 14 }}>
             {installing ? "Installing…" : <><Download size={16}/>Install app</>}
           </button>
+        ) : isIOS() ? (
+          // iOS Safari (and every other iOS browser — they're all
+          // WebKit under the hood) has no JS API for a one-tap install
+          // like Chrome/Android does; Apple only exposes it as a manual
+          // Share-sheet action, so this is the real, complete flow —
+          // not a fallback for something broken.
+          <div style={{ background: "var(--surface2)", borderRadius: 14, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+              <span style={{
+                width: 22, height: 22, borderRadius: 6, background: "var(--accent)", color: "#fff",
+                flex: "none", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800,
+              }}>1</span>
+              <p style={{ fontSize: 12.5, color: "var(--text2)", margin: 0, lineHeight: 1.6 }}>
+                Open this page in <strong>Safari</strong> (not Chrome — iOS only allows
+                this from Safari&rsquo;s own Share menu), then tap the <Share size={13} style={{ verticalAlign: -2 }}/> <strong>Share</strong> icon
+                in the toolbar.
+              </p>
+            </div>
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+              <span style={{
+                width: 22, height: 22, borderRadius: 6, background: "var(--accent)", color: "#fff",
+                flex: "none", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800,
+              }}>2</span>
+              <p style={{ fontSize: 12.5, color: "var(--text2)", margin: 0, lineHeight: 1.6 }}>
+                Scroll down and tap <strong>&ldquo;Add to Home Screen,&rdquo;</strong> then <strong>Add</strong>.
+              </p>
+            </div>
+          </div>
         ) : (
           <div style={{ background: "var(--surface2)", borderRadius: 14, padding: 14, display: "flex", gap: 10 }}>
             <Share size={18} color="var(--accent)" style={{ flex: "none", marginTop: 1 }}/>
             <p style={{ fontSize: 12.5, color: "var(--text2)", margin: 0, lineHeight: 1.6 }}>
-              Tap the <strong>Share</strong> icon in your browser&rsquo;s toolbar, then
-              choose <strong>&ldquo;Add to Home Screen.&rdquo;</strong>
+              Open your browser&rsquo;s menu and choose <strong>&ldquo;Add to Home Screen&rdquo;</strong> or
+              <strong> &ldquo;Install app.&rdquo;</strong> If you don&rsquo;t see it, try opening this page in Chrome.
             </p>
           </div>
         )}
