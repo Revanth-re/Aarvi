@@ -47,7 +47,16 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
     const dead: string[] = [];
     await Promise.all(subs.map(async (sub: any) => {
       try {
-        await webpush.sendNotification(sub, JSON.stringify(payload));
+        // urgency: "high" + a short TTL tells the push service (FCM,
+        // Mozilla's, Apple's web-push relay, etc.) this is a
+        // time-sensitive alert to hand off immediately rather than
+        // batch/delay it for battery savings — without this, some
+        // services can sit on a "normal"-priority push for a while
+        // before actually delivering it.
+        await webpush.sendNotification(sub, JSON.stringify(payload), {
+          urgency: "high",
+          TTL: 60,
+        });
       } catch (e: any) {
         if (e?.statusCode === 404 || e?.statusCode === 410) dead.push(sub.endpoint);
         // Any other error (network blip, service outage) — leave the

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { UserModel } from "@/models/User";
 import { notifyUser } from "@/lib/notify";
+import { sendPushToUser } from "@/lib/push";
 
 type P = { params: Promise<{ id: string }> };
 
@@ -59,6 +60,13 @@ export async function POST(req: NextRequest, { params }: P) {
         fromUserId: id,
         fromUserName: actor.name,
       });
+      if (target.settings?.notif?.newMessages !== false) {
+        await sendPushToUser(targetId, {
+          title: `${actor.name || "Someone"} wants to follow you`,
+          body: "Tap to review the request.",
+          url: "/profile/requests",
+        });
+      }
     } else {
       // Public account (the default) → follow immediately, no approval needed.
       actor.following.push(targetId);
@@ -74,6 +82,13 @@ export async function POST(req: NextRequest, { params }: P) {
         fromUserId: id,
         fromUserName: actor.name,
       });
+      if (target.settings?.notif?.newMessages !== false) {
+        await sendPushToUser(targetId, {
+          title: `${actor.name || "Someone"} started following you`,
+          body: "Tap to view their profile.",
+          url: `/u/${id}`,
+        });
+      }
     }
 
     return NextResponse.json({

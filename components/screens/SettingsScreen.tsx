@@ -175,7 +175,7 @@ export default function SettingsScreen() {
         {/* ── Notifications ── */}
         <Group icon={<Bell size={15}/>} title="Notifications" sub="What we ping you about">
           {canPush && user && (
-            <Toggle label="Push new messages to this device" on={pushOn} set={togglePush} disabled={pushBusy}/>
+            <Toggle label="Push messages & follows to this device" on={pushOn} set={togglePush} disabled={pushBusy}/>
           )}
           <Toggle label="New episode drops" on={settings.notif.episodeDrops} set={v => setGroup("notif", { episodeDrops: v })}/>
           <Toggle label="Creator stories & messages" on={settings.notif.creatorStories} set={v => setGroup("notif", { creatorStories: v })}/>
