@@ -17,7 +17,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   tabBarStyle: "transparent",
   notif: {
     episodeDrops: true, creatorStories: true, coinRewards: true,
-    thoughtReplies: true, weeklyRecap: false,
+    thoughtReplies: true, weeklyRecap: false, newMessages: true,
   },
   playback: {
     autoplayNext: true, skipIntro: true, fadeOnSleep: true, dataSaver: false,
@@ -187,11 +187,15 @@ export const useToast = create<ToastStore>((set) => ({
 interface DataCacheStore {
   cache: Record<string, unknown>;
   setCache: (key: string, data: unknown) => void;
+  /** Wiped on logout so the next signed-in visitor on this device never
+   *  briefly sees the previous account's cached screens. */
+  clearCache: () => void;
 }
 
 export const useDataCache = create<DataCacheStore>((set) => ({
   cache: {},
   setCache: (key, data) => set((s) => ({ cache: { ...s.cache, [key]: data } })),
+  clearCache: () => set({ cache: {} }),
 }));
 
 /** Typed read helper — `useDataCache(s => s.cache[key]) as T | undefined`. */

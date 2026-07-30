@@ -189,6 +189,24 @@ export function timeAgo(iso: string | Date): string {
   return `${Math.floor(diff / 604800)}w`;
 }
 
+/** "3:45 PM" — a clock-time stamp for chat bubbles, not a relative one. */
+export function clockTime(iso: string | Date): string {
+  const d = typeof iso === "string" ? new Date(iso) : iso;
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+/** "Today", "Yesterday", or "12 Mar" — the date divider between groups
+ *  of messages sent on different days. */
+export function dayLabel(iso: string | Date): string {
+  const d = typeof iso === "string" ? new Date(iso) : iso;
+  const now = new Date();
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diffDays = Math.round((startOf(now) - startOf(d)) / 86400000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  return d.toLocaleDateString([], { day: "numeric", month: "short", year: d.getFullYear() !== now.getFullYear() ? "numeric" : undefined });
+}
+
 /** Deterministic gradient for a string — same seed, same colours. */
 export function gradientFor(seed: string): string {
   const PAIRS = [

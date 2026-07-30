@@ -1,11 +1,11 @@
 "use client";
-import { Suspense, useEffect, useState, useRef } from "react";
+import { Fragment, Suspense, useEffect, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, Send, MessageSquare, Smile, Paperclip, X, Loader2 } from "lucide-react";
+import { ArrowLeft, Send, MessageSquare, Smile, Paperclip, X, Loader2, Check, CheckCheck } from "lucide-react";
 import { Conversation, MessageItem, MessageAttachment } from "@/types";
 import { useApp, useToast } from "@/store";
 import { creatorFetch } from "@/lib/creatorFetch";
-import { timeAgo } from "@/lib/gamification";
+import { timeAgo, clockTime, dayLabel } from "@/lib/gamification";
 import { Screen, EmptyState } from "@/components/kit";
 import TopBar from "@/components/shell/TopBar";
 import Avatar from "@/components/ui/Avatar";
@@ -179,10 +179,23 @@ function MessagesScreenInner() {
           </div>
 
           <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
-            {messages.map(m => {
+            {messages.map((m, i) => {
               const mine = m.senderId === user._id;
+              // A divider whenever the calendar day changes from the
+              // previous message — same idea as WhatsApp/Telegram.
+              const prev = messages[i - 1];
+              const showDivider = !prev || dayLabel(prev.createdAt) !== dayLabel(m.createdAt);
               return (
-                <div key={m._id} style={{ alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "78%" }}>
+                <Fragment key={m._id}>
+                  {showDivider && (
+                    <span style={{
+                      alignSelf: "center", fontSize: 10.5, fontWeight: 700, color: "var(--text3)",
+                      background: "var(--surface2)", padding: "4px 12px", borderRadius: 999, margin: "6px 0",
+                    }}>
+                      {dayLabel(m.createdAt)}
+                    </span>
+                  )}
+                  <div style={{ alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "78%" }}>
                   {m.storyRef && (
                     <div style={{
                       display: "flex", alignItems: "center", gap: 8, marginBottom: 4,
@@ -217,7 +230,22 @@ function MessagesScreenInner() {
                       {m.text}
                     </div>
                   )}
-                </div>
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 3, marginTop: 3,
+                    justifyContent: mine ? "flex-end" : "flex-start",
+                  }}>
+                    <span style={{ fontSize: 10, color: "var(--text3)" }}>{clockTime(m.createdAt)}</span>
+                    {/* Ticks only make sense on your own outgoing messages —
+                        one check once it's sent, two once they've read it
+                        (blue-ish accent), same convention as WhatsApp. */}
+                    {mine && (
+                      m.read
+                        ? <CheckCheck size={13} color="var(--accent)"/>
+                        : <Check size={13} color="var(--text3)"/>
+                    )}
+                  </div>
+                  </div>
+                </Fragment>
               );
             })}
             <div ref={endRef}/>

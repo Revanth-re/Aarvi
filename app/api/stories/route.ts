@@ -17,16 +17,24 @@ export async function GET(req: NextRequest) {
     await connectDB();
     const me = req.nextUrl.searchParams.get("userId") || "";
 
-    let authorIds: string[] | null = null;
+    let followingIds: string[] | null = null;
     if (me) {
       const user = await UserModel.findById(me).select("following").lean<any>();
-      authorIds = [...(user?.following ?? []), me];
+      followingIds = user?.following ?? [];
     }
 
     // The explicit expiry filter matters: Mongo's TTL reaper only runs
     // about once a minute, so without it an expired story stays visible.
     const q: any = { expiresAt: { $gt: new Date() } };
-    if (authorIds) q.userId = { $in: authorIds };
+    if (followingIds) {
+      // Your own stories always show to you (hidden or not — "hidden"
+      // means hidden from everyone else, not from yourself); people you
+      // follow only show their non-hidden ones.
+      q.$or = [{ userId: me }, { userId: { $in: followingIds }, hidden: { $ne: true } }];
+    } else {
+      // No one logged in yet — never show a hidden story to a guest.
+      q.hidden = { $ne: true };
+    }
 
     const stories = await StoryModel.find(q).sort({ createdAt: -1 }).limit(200).lean<any[]>();
     if (!stories.length) return NextResponse.json([]);
@@ -53,6 +61,7 @@ export async function GET(req: NextRequest) {
         caption: s.caption || "", mediaUrl: s.mediaUrl || "",
         createdAt: iso(s.createdAt), expiresAt: iso(s.expiresAt),
         viewCount: (s.viewedBy || []).length,
+        hidden: !!s.hidden,
       });
     }
 
@@ -68,11 +77,11 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/stories — publish a story.
-// Body: { userId, kind: "audio"|"photo"|"quote", caption, mediaUrl? }
+// Body: { userId, kind: "audio"|"photo"|"quote", caption, mediaUrl?, hidden? }
 export async function POST(req: NextRequest) {
   try {
     await connectDB();
-    const { userId, kind, caption = "", mediaUrl = "" } = await req.json();
+    const { userId, kind, caption = "", mediaUrl = "", hidden = false } = await req.json();
 
     if (!userId) return NextResponse.json({ error: "userId is required" }, { status: 400 });
     if (!["audio", "photo", "quote"].includes(kind)) {
@@ -95,9 +104,10 @@ export async function POST(req: NextRequest) {
       userId, kind,
       caption: String(caption).slice(0, 280),
       mediaUrl,
+      hidden: !!hidden,
     });
 
-    return NextResponse.json({ _id: idOf(doc._id), ok: true }, { status: 201 });
+    return NextResponse.json({ _id: idOf(doc._id), ok: true, hidden: doc.hidden }, { status: 201 });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }

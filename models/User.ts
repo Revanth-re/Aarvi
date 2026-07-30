@@ -16,6 +16,10 @@ const SettingsSchema = new Schema({
     coinRewards:    { type: Boolean, default: true },
     thoughtReplies: { type: Boolean, default: true },
     weeklyRecap:    { type: Boolean, default: false },
+    // Push (device-level) notifications for new DMs — separate from
+    // the in-app notification bell, which always shows these
+    // regardless of this setting. See lib/push.ts.
+    newMessages:    { type: Boolean, default: true },
   },
   playback: {
     autoplayNext: { type: Boolean, default: true },
@@ -50,6 +54,19 @@ const PlaylistSchema = new Schema({
   items:     [PlaylistItemSchema],
   createdAt: { type: Date, default: Date.now },
 });
+
+// One per browser/device that's opted into push notifications — the
+// shape the Push API's PushSubscription.toJSON() produces. A person
+// signed in on their phone and laptop both get pushed to, so this is
+// an array, not a single value; deduped by `endpoint` (unique per
+// device+browser) in app/api/push/subscribe/route.ts.
+const PushSubscriptionSchema = new Schema({
+  endpoint: { type: String, required: true },
+  keys: {
+    p256dh: { type: String, required: true },
+    auth:   { type: String, required: true },
+  },
+}, { _id: false });
 
 const UserSchema = new Schema({
   googleId: { type: String, unique: true, sparse: true },
@@ -88,6 +105,8 @@ const UserSchema = new Schema({
   followRequestsSent:     [{ type: String }],
 
   roles: [{ type: String }],
+
+  pushSubscriptions: [PushSubscriptionSchema],
 
   settings: { type: SettingsSchema, default: () => ({}) },
 

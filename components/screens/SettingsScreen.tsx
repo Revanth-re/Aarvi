@@ -1,8 +1,10 @@
 "use client";
-import { ReactNode } from "react";
-import { Palette, Bell, Headphones, Timer, Download, Shield, Sun, Moon, Monitor, Layers } from "lucide-react";
+import { ReactNode, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Palette, Bell, Headphones, Timer, Download, Shield, Sun, Moon, Monitor, Layers, LogOut, UserX } from "lucide-react";
 import { ThemeMode, TabBarStyle, UserSettings } from "@/types";
-import { useApp } from "@/store";
+import { useApp, useDataCache, useToast } from "@/store";
+import { pushSupported, enablePush, disablePush } from "@/lib/push-client";
 import { Screen } from "@/components/kit";
 import TopBar from "@/components/shell/TopBar";
 
@@ -19,15 +21,91 @@ const SLEEP_PRESETS = [
 ];
 
 export default function SettingsScreen() {
+  const router = useRouter();
+  const user = useApp(s => s.user);
+  const setUser = useApp(s => s.setUser);
   const settings = useApp(s => s.settings);
   const setSettings = useApp(s => s.setSettings);
   const setThemeMode = useApp(s => s.setThemeMode);
   const setTabBarStyle = useApp(s => s.setTabBarStyle);
+  const clearCache = useDataCache(s => s.clearCache);
+  const showToast = useToast(s => s.show);
+  const [deleting, setDeleting] = useState(false);
+  // Feature-detected client-side only, after mount — checking
+  // navigator/window during the server render would mismatch hydration.
+  const [canPush, setCanPush] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  useEffect(() => {
+    const supported = pushSupported();
+    // Deferred a tick — setting state synchronously inside an effect's
+    // body (vs. inside a callback like a .then()) can trigger a
+    // cascading-render lint error; queueMicrotask sidesteps it cheaply.
+    queueMicrotask(() => setCanPush(supported));
+  }, []);
+
+  const togglePush = async (v: boolean) => {
+    if (!user) return;
+    setPushBusy(true);
+    try {
+      if (v) {
+        const ok = await enablePush(user._id);
+        if (!ok) {
+          showToast(
+            typeof Notification !== "undefined" && Notification.permission === "denied"
+              ? "Notifications are blocked — check your browser's site settings"
+              : "Couldn't enable notifications on this device",
+            "error"
+          );
+          return;
+        }
+        showToast("Message notifications on", "success");
+      } else {
+        await disablePush(user._id);
+        showToast("Message notifications off", "info");
+      }
+      setGroup("notif", { newMessages: v });
+    } finally {
+      setPushBusy(false);
+    }
+  };
 
   // Every toggle writes to the local store, which applies instantly;
   // SettingsSync pushes it to the server in the background.
   const setGroup = <K extends keyof UserSettings>(group: K, patch: Partial<UserSettings[K]>) => {
     setSettings({ [group]: { ...(settings[group] as object), ...patch } } as Partial<UserSettings>);
+  };
+
+  const logout = () => {
+    if (!window.confirm("Log out of SWARA FM?")) return;
+    setUser(null);
+    clearCache(); // don't leave the next person on this device seeing your cached screens
+    router.push("/login");
+  };
+
+  const deleteAccount = async () => {
+    if (!user) return;
+    if (!window.confirm(
+      "Delete your account? This logs you out everywhere, frees up your @handle and mobile number for reuse, and can't be undone from the app."
+    )) return;
+
+    setDeleting(true);
+    try {
+      const r = await fetch(`/api/users/${user._id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user._id }),
+      });
+      const d = await r.json();
+      if (!r.ok || d.error) { showToast(d.error || "Couldn't delete account", "error"); return; }
+      setUser(null);
+      clearCache();
+      showToast("Account deleted", "info");
+      router.push("/login");
+    } catch {
+      showToast("Network error", "error");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -82,6 +160,9 @@ export default function SettingsScreen() {
 
         {/* ── Notifications ── */}
         <Group icon={<Bell size={15}/>} title="Notifications" sub="What we ping you about">
+          {canPush && user && (
+            <Toggle label="Push new messages to this device" on={settings.notif.newMessages} set={togglePush} disabled={pushBusy}/>
+          )}
           <Toggle label="New episode drops" on={settings.notif.episodeDrops} set={v => setGroup("notif", { episodeDrops: v })}/>
           <Toggle label="Creator stories & messages" on={settings.notif.creatorStories} set={v => setGroup("notif", { creatorStories: v })}/>
           <Toggle label="Coin rewards & streaks" on={settings.notif.coinRewards} set={v => setGroup("notif", { coinRewards: v })}/>
@@ -128,6 +209,23 @@ export default function SettingsScreen() {
           <Toggle label="Show my 💬 thoughts publicly" on={settings.privacy.publicThoughts} set={v => setGroup("privacy", { publicThoughts: v })} last/>
         </Group>
 
+        {/* ── Account ── */}
+        {user && (
+          <Group icon={<UserX size={15}/>} title="Account" sub="Log out or leave SWARA FM">
+            <button onClick={logout} className="btn btn-soft btn-sm" style={{ width: "100%", justifyContent: "center", marginBottom: 10 }}>
+              <LogOut size={14}/>Log out
+            </button>
+            <button onClick={deleteAccount} disabled={deleting} className="btn btn-sm" style={{
+              width: "100%", justifyContent: "center",
+              background: "color-mix(in srgb, var(--danger) 12%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--danger) 35%, transparent)",
+              color: "var(--danger)",
+            }}>
+              <UserX size={14}/>{deleting ? "Deleting…" : "Delete account"}
+            </button>
+          </Group>
+        )}
+
         <p style={{ textAlign: "center", fontSize: 11.5, color: "var(--text3)" }}>SWARA FM · v1.0.0</p>
       </Screen>
     </>
@@ -158,17 +256,18 @@ function Label({ children }: { children: ReactNode }) {
 }
 
 function Toggle({
-  label, on, set, last,
-}: { label: string; on: boolean; set: (v: boolean) => void; last?: boolean }) {
+  label, on, set, last, disabled,
+}: { label: string; on: boolean; set: (v: boolean) => void; last?: boolean; disabled?: boolean }) {
   return (
     <label style={{
       display: "flex", alignItems: "center", justifyContent: "space-between",
-      gap: 12, padding: "11px 0", cursor: "pointer",
+      gap: 12, padding: "11px 0", cursor: disabled ? "default" : "pointer",
       borderBottom: last ? "none" : "1px solid var(--border)",
+      opacity: disabled ? 0.6 : 1,
     }}>
       <span style={{ fontSize: 13.5, color: "var(--text)" }}>{label}</span>
       <span className="toggle">
-        <input type="checkbox" checked={on} onChange={e => set(e.target.checked)}/>
+        <input type="checkbox" checked={on} disabled={disabled} onChange={e => set(e.target.checked)}/>
         <span className="toggle-track"/>
       </span>
     </label>

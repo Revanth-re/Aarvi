@@ -80,6 +80,8 @@ export interface UserSettings {
   notif: {
     episodeDrops: boolean; creatorStories: boolean; coinRewards: boolean;
     thoughtReplies: boolean; weeklyRecap: boolean;
+    /** Device push notifications for new DMs — see lib/push.ts. */
+    newMessages: boolean;
   };
   playback: {
     autoplayNext: boolean; skipIntro: boolean; fadeOnSleep: boolean; dataSaver: boolean;
@@ -148,6 +150,8 @@ export interface Story {
   caption: string; mediaUrl?: string;
   createdAt: string; expiresAt: string;
   viewCount: number;
+  /** "Only me" — hidden from everyone but the owner. */
+  hidden: boolean;
 }
 export interface StoryGroup {
   userId: string; name: string; handle: string; image: string;

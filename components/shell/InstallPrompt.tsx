@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Download, X, Share } from "lucide-react";
 import { useApp, useInstallPrompt, BeforeInstallPromptEvent } from "@/store";
+import { registerServiceWorker } from "@/lib/push-client";
 
 const SEEN_KEY = "swara-install-seen";
 
@@ -31,6 +32,13 @@ export default function InstallPrompt() {
   const show = useInstallPrompt(s => s.show);
   const hide = useInstallPrompt(s => s.hide);
   const [installing, setInstalling] = useState(false);
+
+  // Registered unconditionally (not just when someone opts into push)
+  // — some browsers only count the app as installable once an active
+  // service worker is controlling the page, and this is also what
+  // lib/push-client.ts's enablePush() reuses when notifications are
+  // turned on later.
+  useEffect(() => { registerServiceWorker(); }, []);
 
   // Chrome/Android/desktop Chrome fire this once, early — capture it
   // and suppress the browser's own mini-infobar so our modal is the

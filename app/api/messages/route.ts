@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/mongodb";
 import { ConversationModel, MessageModel, conversationKey } from "@/models/Conversation";
 import { UserModel } from "@/models/User";
 import { idOf, iso, publicUser } from "@/lib/serialize";
+import { sendPushToUser } from "@/lib/push";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -108,6 +109,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "This person only accepts messages from people they follow" }, { status: 403 });
     }
 
+    // Story replies specifically need the Instagram rule: you can only
+    // reply to a story if you follow that person — viewing it doesn't
+    // require that (the home rail is already follow-scoped), but the
+    // swipe-up reply itself is gated regardless of their general
+    // allowMessages setting above.
+    if (storyRef?.storyId) {
+      const me = await UserModel.findById(userId).select("following").lean<any>();
+      if (!(me?.following ?? []).includes(toId)) {
+        return NextResponse.json({ error: "Follow them to reply to their story" }, { status: 403 });
+      }
+    }
+
     const key = conversationKey(userId, toId);
     // Upsert on the unique key so two people opening a thread at the
     // same moment can't create duplicate conversations.
@@ -140,6 +153,25 @@ export async function POST(req: NextRequest) {
         attachment: { url: String(attachment.url), kind: attachment.kind === "video" ? "video" : "image" },
       } : {}),
     });
+
+    // Device push notification — "if any messages sent by any other
+    // people in app the notification should come in their notification
+    // bar like WhatsApp/Insta." Respects the recipient's own toggle
+    // (Settings → Notifications → "Push new messages to this device",
+    // default on). Awaited (not fire-and-forget) because serverless
+    // functions can get torn down right after the response is sent,
+    // which would silently kill a detached async call before it
+    // actually reaches the push service — sendPushToUser itself never
+    // throws, so this can't turn a push failure into a failed send.
+    if (to.settings?.notif?.newMessages !== false) {
+      const sender = await UserModel.findById(userId).select("name").lean<any>();
+      const preview = msg.text || (msg.attachment?.kind === "video" ? "Sent a video" : msg.attachment ? "Sent a photo" : "New message");
+      await sendPushToUser(toId, {
+        title: sender?.name || "New message",
+        body: preview.length > 120 ? `${preview.slice(0, 117)}...` : preview,
+        url: `/messages?with=${userId}`,
+      });
+    }
 
     return NextResponse.json({
       message: {

@@ -2,18 +2,30 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Search, Bell, Settings as Cog } from "lucide-react";
-import { useApp } from "@/store";
+import { useApp, useDataCache, cacheKeyFor } from "@/store";
 import { formatCount } from "@/lib/gamification";
 import Avatar from "@/components/ui/Avatar";
 
 // The header from every screenshot: title (or wordmark on Home), coin
 // pill, search, notifications with an unread dot, and settings.
+//
+// TopBar is remounted fresh on every screen (each page renders its own
+// <TopBar/>), so without caching, the coin count would reset to 0 and
+// flash back in on every single navigation — seeding from the shared
+// in-memory cache (same pattern as the tab screens) keeps the last
+// known value on screen while it quietly refetches.
 export default function TopBar({
   title, wordmark = false,
 }: { title: string; wordmark?: boolean }) {
   const user = useApp(s => s.user);
-  const [coins, setCoins] = useState(0);
-  const [unread, setUnread] = useState(0);
+  const coinsKey = cacheKeyFor("coins", user?._id);
+  const unreadKey = cacheKeyFor("topbar-unread", user?._id);
+  const cachedCoins = useDataCache(s => s.cache[coinsKey]) as number | undefined;
+  const cachedUnread = useDataCache(s => s.cache[unreadKey]) as number | undefined;
+  const setCache = useDataCache(s => s.setCache);
+
+  const [coins, setCoins] = useState(cachedCoins ?? 0);
+  const [unread, setUnread] = useState(cachedUnread ?? 0);
 
   useEffect(() => {
     if (!user) return;
@@ -21,12 +33,20 @@ export default function TopBar({
 
     fetch(`/api/coins?userId=${user._id}`)
       .then(r => r.json())
-      .then(d => { if (!cancelled && typeof d.coins === "number") setCoins(d.coins); })
+      .then(d => {
+        if (cancelled || typeof d.coins !== "number") return;
+        setCoins(d.coins);
+        setCache(coinsKey, d.coins);
+      })
       .catch(() => {});
 
     fetch(`/api/users/${user._id}/notifications?category=all`)
       .then(r => r.json())
-      .then(d => { if (!cancelled && typeof d.unread === "number") setUnread(d.unread); })
+      .then(d => {
+        if (cancelled || typeof d.unread !== "number") return;
+        setUnread(d.unread);
+        setCache(unreadKey, d.unread);
+      })
       .catch(() => {});
 
     return () => { cancelled = true; };
