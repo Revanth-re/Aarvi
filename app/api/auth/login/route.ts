@@ -4,6 +4,7 @@ import { UserModel } from "@/models/User";
 import { handleFrom } from "@/lib/gamification";
 import { verifyPassword } from "@/lib/password";
 import { sessionUser } from "@/lib/serialize";
+import { friendlyDbError } from "@/lib/mongoError";
 
 // POST /api/auth/login — { identifier, password }
 // `identifier` is a username or a mobile number — whichever it looks
@@ -44,6 +45,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ user: sessionUser(user) });
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+    const { message, status } = friendlyDbError(e);
+    return NextResponse.json({ error: message }, { status });
   }
 }

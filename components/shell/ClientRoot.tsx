@@ -6,6 +6,7 @@ import ThemeSync from "./ThemeSync";
 import SettingsSync from "./SettingsSync";
 import Player from "./Player";
 import ListeningTracker from "./ListeningTracker";
+import InstallPrompt from "./InstallPrompt";
 
 export default function ClientRoot({ children }: { children: React.ReactNode }) {
   const path = usePathname();
@@ -27,6 +28,7 @@ export default function ClientRoot({ children }: { children: React.ReactNode }) 
         </>
       )}
       <ToastHost/>
+      {!isAdmin && <InstallPrompt/>}
     </>
   );
 }

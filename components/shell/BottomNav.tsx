@@ -2,16 +2,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Home, Library, Zap, Compass, MessageSquare, User } from "lucide-react";
+import { Home, Library, Zap, Compass, MessageSquare } from "lucide-react";
 import { useApp } from "@/store";
 
+// Profile lives in the top bar now (an avatar next to Settings), not
+// here — five tabs for the five things you do constantly; Profile is
+// a once-in-a-while destination, one tap away up top instead.
 const TABS = [
   { href: "/",         label: "Home",     Icon: Home },
   { href: "/library",  label: "Library",  Icon: Library },
   { href: "/shorts",   label: "Shorts",   Icon: Zap },
   { href: "/discover", label: "Discover", Icon: Compass },
   { href: "/messages", label: "Messages", Icon: MessageSquare },
-  { href: "/profile",  label: "Profile",  Icon: User },
 ];
 
 export default function BottomNav() {

@@ -5,6 +5,23 @@ import ClientRoot from "@/components/shell/ClientRoot";
 export const metadata: Metadata = {
   title: "SWARA FM — Audio stories, in your language",
   description: "Audio drama, shorts and thoughts. Listen, react, collect.",
+  // Makes the app installable ("Download app") straight from the
+  // browser — Chrome/Android shows its native install prompt, and
+  // iOS/Safari picks these up for "Add to Home Screen" even without
+  // one. See components/shell/InstallPrompt.tsx for the in-app nudge.
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "SWARA FM",
+  },
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export const viewport: Viewport = {

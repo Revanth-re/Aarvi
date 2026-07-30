@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Search, Bell, Settings as Cog } from "lucide-react";
 import { useApp } from "@/store";
 import { formatCount } from "@/lib/gamification";
+import Avatar from "@/components/ui/Avatar";
 
 // The header from every screenshot: title (or wordmark on Home), coin
 // pill, search, notifications with an unread dot, and settings.
@@ -77,6 +78,11 @@ export default function TopBar({
 
       <Link href="/settings" aria-label="Settings" style={{ color: "var(--text2)", display: "flex", flex: "none" }}>
         <Cog size={20}/>
+      </Link>
+
+      {/* Profile lives up here now, not in the bottom tab bar. */}
+      <Link href={user ? "/profile" : "/login"} aria-label="Profile" style={{ display: "flex", flex: "none" }}>
+        <Avatar name={user?.name || "Listener"} image={user?.image} size={26}/>
       </Link>
     </header>
   );

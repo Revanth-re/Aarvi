@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Mic, Pencil, MessageSquare, Settings as Cog, Flame, Headphones, MessageCircle, UserCheck } from "lucide-react";
+import { Mic, Pencil, MessageSquare, Settings as Cog, Flame, Headphones, MessageCircle, UserCheck, Download } from "lucide-react";
 import { DnaSlice, Thought } from "@/types";
-import { useApp, useDataCache, cacheKeyFor } from "@/store";
+import { useApp, useDataCache, cacheKeyFor, useInstallPrompt } from "@/store";
 import { formatCount } from "@/lib/gamification";
 import { Screen, SectionHeader, Cover, EmptyState } from "@/components/kit";
 import TopBar, { CoinGlyph } from "@/components/shell/TopBar";
@@ -20,6 +20,7 @@ interface ProfileCache { game: Game | null; dna: DnaSlice[]; recent: RecentItem[
 
 export default function ProfileScreen() {
   const user = useApp(s => s.user);
+  const showInstallPrompt = useInstallPrompt(s => s.show);
 
   const cacheKey = cacheKeyFor("profile", user?._id);
   const cached = useDataCache(s => s.cache[cacheKey]) as ProfileCache | undefined;
@@ -142,6 +143,23 @@ export default function ProfileScreen() {
             <Link href="/settings" className="btn btn-xs" style={{ ...pillBtn, padding: "5px 10px" }} aria-label="Settings"><Cog size={13}/></Link>
           </div>
         </div>
+
+        {/* ── Download the app ── */}
+        <button onClick={() => showInstallPrompt()} className="card" style={{
+          display: "flex", alignItems: "center", gap: 12, padding: "13px 14px",
+          cursor: "pointer", textAlign: "left", width: "100%",
+        }}>
+          <span style={{
+            width: 38, height: 38, borderRadius: 11, background: "var(--grad)", flex: "none",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <Download size={17} color="#fff"/>
+          </span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--text)" }}>Download the app</span>
+            <span style={{ display: "block", fontSize: 11.5, color: "var(--text3)" }}>Add SWARA FM to your home screen</span>
+          </span>
+        </button>
 
         {/* ── Stats ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>

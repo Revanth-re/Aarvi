@@ -198,3 +198,32 @@ export const useDataCache = create<DataCacheStore>((set) => ({
 export function cacheKeyFor(scope: string, ...parts: (string | undefined)[]): string {
   return [scope, ...parts.map(p => p ?? "guest")].join(":");
 }
+
+// ── "Download the app" (PWA install) ──
+// Not persisted: the captured `beforeinstallprompt` event can't survive
+// a reload anyway (the browser re-fires it fresh each load), so this
+// only needs to live for the current page session. Whether someone has
+// already been shown the auto-nudge once is tracked separately via a
+// plain localStorage flag (see components/shell/InstallPrompt.tsx),
+// not in here, since that needs to persist across reloads.
+interface InstallPromptStore {
+  deferredEvent: BeforeInstallPromptEvent | null;
+  visible: boolean;
+  setDeferredEvent: (e: BeforeInstallPromptEvent | null) => void;
+  show: () => void;
+  hide: () => void;
+}
+
+// Not in lib.dom.d.ts yet — Chrome-only, non-standard event.
+export interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
+
+export const useInstallPrompt = create<InstallPromptStore>((set) => ({
+  deferredEvent: null,
+  visible: false,
+  setDeferredEvent: (e) => set({ deferredEvent: e }),
+  show: () => set({ visible: true }),
+  hide: () => set({ visible: false }),
+}));

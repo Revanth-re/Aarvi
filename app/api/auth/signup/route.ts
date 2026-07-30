@@ -4,6 +4,7 @@ import { UserModel } from "@/models/User";
 import { handleFrom } from "@/lib/gamification";
 import { hashPassword } from "@/lib/password";
 import { sessionUser } from "@/lib/serialize";
+import { friendlyDbError } from "@/lib/mongoError";
 
 // POST /api/auth/signup — { name, username, mobile, password }
 //
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ user: sessionUser(user) }, { status: 201 });
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+    const { message, status } = friendlyDbError(e);
+    return NextResponse.json({ error: message }, { status });
   }
 }
