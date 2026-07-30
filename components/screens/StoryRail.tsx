@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { Plus, Mic, Image as ImageIcon, Quote, X } from "lucide-react";
+import { Plus, Mic, Image as ImageIcon, Quote, X, Send } from "lucide-react";
 import { StoryGroup, StoryKind } from "@/types";
 import { useApp, useToast } from "@/store";
 import { timeAgo } from "@/lib/gamification";
@@ -210,8 +210,38 @@ function PostStorySheet({
 
 // ── Full-screen story viewer ──
 function StoryViewer({ group, onClose }: { group: StoryGroup; onClose: () => void }) {
+  const user = useApp(s => s.user);
+  const showToast = useToast(s => s.show);
   const [idx, setIdx] = useState(0);
+  const [reply, setReply] = useState("");
+  const [sending, setSending] = useState(false);
   const story = group.stories[idx];
+
+  const sendReply = async () => {
+    if (!user) { showToast("Log in to reply to stories", "info"); return; }
+    const text = reply.trim();
+    if (!text || !story) return;
+
+    setSending(true);
+    try {
+      const r = await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user._id, toId: group.userId, text,
+          storyRef: { storyId: story._id, kind: story.kind, mediaUrl: story.mediaUrl || "", caption: story.caption || "" },
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok || d.error) { showToast(d.error || "Couldn't send", "error"); return; }
+      setReply("");
+      showToast("Reply sent", "success");
+    } catch {
+      showToast("Network error", "error");
+    } finally {
+      setSending(false);
+    }
+  };
 
   // Escape closes, arrows move — the viewer takes over the screen, so
   // it needs to be dismissible without hunting for the X.
@@ -283,6 +313,36 @@ function StoryViewer({ group, onClose }: { group: StoryGroup; onClose: () => voi
           </p>
         )}
       </div>
+
+      {/* Reply → becomes a DM to the story's owner, not a public
+          comment (same as Instagram). Not shown on your own story. */}
+      {group.userId !== user?._id && (
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            display: "flex", gap: 8, padding: "10px 14px",
+            marginBottom: "env(safe-area-inset-bottom, 10px)",
+          }}>
+          <input
+            value={reply} onChange={e => setReply(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") sendReply(); }}
+            placeholder={`Reply to ${group.name.split(" ")[0]}…`}
+            style={{
+              flex: 1, background: "rgba(255,255,255,.12)", border: "1px solid rgba(255,255,255,.25)",
+              borderRadius: 999, padding: "10px 16px", color: "#fff", fontSize: 13.5, outline: "none",
+            }}
+          />
+          <button onClick={sendReply} disabled={sending || !reply.trim()} aria-label="Send reply"
+            style={{
+              width: 40, height: 40, borderRadius: "50%", border: "none", flex: "none",
+              background: "var(--grad)", color: "#fff", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              opacity: reply.trim() ? 1 : .5,
+            }}>
+            <Send size={16}/>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -10,7 +10,10 @@
 
 :root {
   --ff-sans: 'Sora', system-ui, -apple-system, sans-serif;
-  --ff-display: var(--font-display), 'Sora', sans-serif;
+  /* Single standard font everywhere — kept as an alias (rather than
+     deleting) so any remaining var(--ff-display) reference still
+     resolves to the same font instead of falling back to serif. */
+  --ff-display: var(--ff-sans);
   --r-sm: 10px; --r: 16px; --r-lg: 22px; --r-pill: 999px;
   /* Chrome heights — anything fixed to a screen edge offsets by these. */
   --topbar-h: 56px;
@@ -165,6 +168,8 @@ textarea.inp { border-radius: var(--r); resize: vertical; line-height: 1.6; }
 .toggle input:checked + .toggle-track::before { transform: translateX(18px); }
 
 /* ── Animation ── */
+@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+.spin { animation: spin .8s linear infinite; display: inline-flex; }
 @keyframes fadeUp { from { opacity:0; transform: translateY(10px) } to { opacity:1; transform:none } }
 @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
 @keyframes shimmer { 0% { background-position:-200% 0 } 100% { background-position:200% 0 } }

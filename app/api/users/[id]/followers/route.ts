@@ -12,9 +12,11 @@ export async function GET(_: NextRequest, { params }: P) {
   try {
     await connectDB();
     const { id } = await params;
-    const followers = await UserModel.find({ following: id }).select("name image").lean();
+    const followers = await UserModel.find({ following: id }).select("name image handle").lean();
     return NextResponse.json({
-      followers: followers.map(u => ({ _id: u._id.toString(), name: u.name || "Listener", image: u.image || "" })),
+      followers: followers.map(u => ({
+        _id: u._id.toString(), name: u.name || "Listener", image: u.image || "", handle: u.handle || "",
+      })),
     });
   } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }
 }

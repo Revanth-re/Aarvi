@@ -32,17 +32,24 @@ export async function POST(request: NextRequest) {
     const file = formData.get("file") as File | null;
     if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
 
+    // image/gif is covered by isImage — GIFs need no special handling,
+    // an <img> tag animates them natively. Video is for DM attachments
+    // (recorded clips, screen shares, etc.), separate from the audio
+    // upload path used for episodes/story audio.
     const isImage = file.type.startsWith("image/");
     const isAudio = file.type.startsWith("audio/");
-    if (!isImage && !isAudio) return NextResponse.json({ error: "Only image or audio files allowed" }, { status: 400 });
+    const isVideo = file.type.startsWith("video/");
+    if (!isImage && !isAudio && !isVideo) {
+      return NextResponse.json({ error: "Only image, video, or audio files allowed" }, { status: 400 });
+    }
 
     const bytes   = await file.arrayBuffer();
     const base64  = Buffer.from(bytes).toString("base64");
     const dataUri = `data:${file.type};base64,${base64}`;
 
     const result = await cloudinary.uploader.upload(dataUri, {
-      folder:        isAudio ? "aarvi/audio" : "aarvi/images",
-      resource_type: isAudio ? "video" : "image",
+      folder:        isAudio ? "aarvi/audio" : isVideo ? "swara/video" : "aarvi/images",
+      resource_type: (isAudio || isVideo) ? "video" : "image",
       ...(isImage && { transformation: [{ quality: "auto", fetch_format: "auto" }] }),
     });
 

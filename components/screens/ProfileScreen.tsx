@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Mic, Pencil, MessageSquare, Settings as Cog, Flame, Headphones, MessageCircle } from "lucide-react";
+import { Mic, Pencil, MessageSquare, Settings as Cog, Flame, Headphones, MessageCircle, UserCheck } from "lucide-react";
 import { DnaSlice, Thought } from "@/types";
-import { useApp } from "@/store";
+import { useApp, useDataCache, cacheKeyFor } from "@/store";
 import { formatCount } from "@/lib/gamification";
 import { Screen, SectionHeader, Cover, EmptyState } from "@/components/kit";
 import TopBar, { CoinGlyph } from "@/components/shell/TopBar";
@@ -16,13 +16,24 @@ interface Game {
 }
 interface RecentItem { _id: string; title: string; coverImage: string; }
 
+interface ProfileCache { game: Game | null; dna: DnaSlice[]; recent: RecentItem[]; thoughts: Thought[]; followerCount: number; followingCount: number; }
+
 export default function ProfileScreen() {
   const user = useApp(s => s.user);
 
-  const [game, setGame] = useState<Game | null>(null);
-  const [dna, setDna] = useState<DnaSlice[]>([]);
-  const [recent, setRecent] = useState<RecentItem[]>([]);
-  const [thoughts, setThoughts] = useState<Thought[]>([]);
+  const cacheKey = cacheKeyFor("profile", user?._id);
+  const cached = useDataCache(s => s.cache[cacheKey]) as ProfileCache | undefined;
+  const setCache = useDataCache(s => s.setCache);
+
+  const [game, setGame] = useState<Game | null>(cached?.game ?? null);
+  const [dna, setDna] = useState<DnaSlice[]>(cached?.dna ?? []);
+  const [recent, setRecent] = useState<RecentItem[]>(cached?.recent ?? []);
+  const [thoughts, setThoughts] = useState<Thought[]>(cached?.thoughts ?? []);
+  const [followerCount, setFollowerCount] = useState(cached?.followerCount ?? 0);
+  const [followingCount, setFollowingCount] = useState(cached?.followingCount ?? 0);
+  // Not part of the seeded/cached payload — this is only ever a small
+  // badge count, cheap enough to refetch each visit rather than store.
+  const [requestCount, setRequestCount] = useState(0);
 
   useEffect(() => {
     if (!user) return;
@@ -32,14 +43,31 @@ export default function ProfileScreen() {
       fetch(`/api/users/${user._id}/gamification`).then(r => r.json()),
       fetch(`/api/users/${user._id}/dna`).then(r => r.json()),
       fetch(`/api/thoughts?userId=${user._id}&authorId=${user._id}&limit=3`).then(r => r.json()),
+      fetch(`/api/users/${user._id}`).then(r => r.json()),
     ])
-      .then(([g, d, t]) => {
+      .then(([g, d, t, u]) => {
         if (cancelled) return;
-        if (!g.error) setGame(g);
-        if (Array.isArray(d.dna)) setDna(d.dna);
-        if (Array.isArray(d.recent)) setRecent(d.recent);
-        if (Array.isArray(t)) setThoughts(t);
+        const nextGame = !g.error ? g : null;
+        const nextDna = Array.isArray(d.dna) ? d.dna : [];
+        const nextRecent = Array.isArray(d.recent) ? d.recent : [];
+        const nextThoughts = Array.isArray(t) ? t : [];
+        const nextFollowers = !u.error ? (u.followerCount ?? 0) : 0;
+        const nextFollowing = !u.error ? (u.followingCount ?? 0) : 0;
+        if (!g.error) setGame(nextGame);
+        if (Array.isArray(d.dna)) setDna(nextDna);
+        if (Array.isArray(d.recent)) setRecent(nextRecent);
+        if (Array.isArray(t)) setThoughts(nextThoughts);
+        if (!u.error) { setFollowerCount(nextFollowers); setFollowingCount(nextFollowing); }
+        setCache(cacheKey, {
+          game: nextGame, dna: nextDna, recent: nextRecent, thoughts: nextThoughts,
+          followerCount: nextFollowers, followingCount: nextFollowing,
+        });
       })
+      .catch(() => {});
+
+    fetch(`/api/users/${user._id}/follow-requests`)
+      .then(r => r.json())
+      .then(d => { if (!cancelled && Array.isArray(d.requests)) setRequestCount(d.requests.length); })
       .catch(() => {});
 
     return () => { cancelled = true; };
@@ -84,10 +112,33 @@ export default function ProfileScreen() {
             </p>
           )}
 
+          <div style={{ display: "flex", gap: 18, marginBottom: 12 }}>
+            <Link href={`/u/${user._id}/connections?tab=followers`}
+              style={{ fontSize: 12.5, color: "rgba(255,255,255,.92)", textDecoration: "none" }}>
+              <strong style={{ fontSize: 14 }}>{followerCount.toLocaleString()}</strong> followers
+            </Link>
+            <Link href={`/u/${user._id}/connections?tab=following`}
+              style={{ fontSize: 12.5, color: "rgba(255,255,255,.92)", textDecoration: "none" }}>
+              <strong style={{ fontSize: 14 }}>{followingCount.toLocaleString()}</strong> following
+            </Link>
+          </div>
+
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             <Link href="/creator" className="btn btn-xs" style={pillBtn}><Mic size={13}/>Creator Studio</Link>
             <Link href="/profile/edit" className="btn btn-xs" style={pillBtn}><Pencil size={13}/>Edit profile</Link>
             <Link href="/messages" className="btn btn-xs" style={pillBtn}><MessageSquare size={13}/>Messages</Link>
+            <Link href="/profile/requests" className="btn btn-xs" style={{ ...pillBtn, position: "relative" }}>
+              <UserCheck size={13}/>Requests
+              {requestCount > 0 && (
+                <span style={{
+                  position: "absolute", top: -5, right: -5, minWidth: 16, height: 16, borderRadius: 8,
+                  background: "#FF4D6D", color: "#fff", fontSize: 9.5, fontWeight: 800,
+                  display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px",
+                }}>
+                  {requestCount > 9 ? "9+" : requestCount}
+                </span>
+              )}
+            </Link>
             <Link href="/settings" className="btn btn-xs" style={{ ...pillBtn, padding: "5px 10px" }} aria-label="Settings"><Cog size={13}/></Link>
           </div>
         </div>
@@ -126,7 +177,10 @@ export default function ProfileScreen() {
           <SectionHeader title="Your thoughts" href="/library"/>
           {thoughts.length ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {thoughts.map(t => <ThoughtCard key={t._id} thought={t}/>)}
+              {thoughts.map(t => (
+                <ThoughtCard key={t._id} thought={t}
+                  onDeleted={id => setThoughts(prev => prev.filter(x => x._id !== id))}/>
+              ))}
             </div>
           ) : (
             <p style={{ fontSize: 12.5, color: "var(--text3)" }}>

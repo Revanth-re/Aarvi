@@ -24,3 +24,27 @@ export function publicUser(u: any) {
     image: u?.image || "",
   };
 }
+
+/**
+ * The full "it's me, I'm logged in" shape stored client-side by
+ * useApp.setUser — matches what the Google OAuth callback has always
+ * sent, so login/signup (username+password) and Google produce an
+ * identical session object. Never includes `password`.
+ */
+export function sessionUser(u: any) {
+  return {
+    _id: idOf(u._id),
+    name: u.name,
+    email: u.email || "",
+    image: u.image || "",
+    handle: u.handle || "",
+    createdAt: u.createdAt,
+    favorites: u.favorites || [],
+    following: u.following || [],
+    followRequestsReceived: u.followRequestsReceived || [],
+    followRequestsSent: u.followRequestsSent || [],
+    playlists: (u.playlists || []).map((p: any) => ({
+      _id: idOf(p._id), name: p.name, items: p.items || [], createdAt: p.createdAt,
+    })),
+  };
+}

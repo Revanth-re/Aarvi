@@ -87,12 +87,16 @@ export interface UserSettings {
   /** Minutes; 0 = off, -1 = end of episode. */
   sleepTimerDefault: number;
   downloads: { wifiOnly: boolean; autoDownloadNext: boolean };
-  privacy: { privateListening: boolean; allowMessages: boolean; publicThoughts: boolean };
+  privacy: {
+    privateListening: boolean; allowMessages: boolean; publicThoughts: boolean;
+    /** Private account: follows need approval instead of auto-accepting. */
+    isPrivate: boolean;
+  };
 }
 
 export interface User extends Partial<BaseEntity> {
   _id: string; name?: string; email?: string; image?: string; createdAt: string;
-  handle?: string; bio?: string;
+  handle?: string; bio?: string; mobile?: string;
   favorites?: string[]; playlists?: Playlist[];
   following?: string[];
   followRequestsReceived?: string[];
@@ -228,9 +232,19 @@ export interface DnaSlice { genre: string; percent: number; }
 // ══════════════════════════════════════════════════════════
 // Messages
 // ══════════════════════════════════════════════════════════
+export interface StoryRef {
+  storyId: string; kind: StoryKind; mediaUrl: string; caption: string;
+}
+export interface MessageAttachment {
+  url: string; kind: "image" | "video";
+}
 export interface MessageItem {
   _id: string; conversationId: string; senderId: string;
   text: string; createdAt: string; read: boolean;
+  /** Present when this message is a reply to someone's story. */
+  storyRef?: StoryRef;
+  /** Present when the message carries an image/video/GIF instead of (or alongside) text. */
+  attachment?: MessageAttachment;
 }
 export interface Conversation {
   _id: string;

@@ -11,10 +11,12 @@ import { Sheet } from "@/components/kit";
  * they type.
  */
 export default function ThoughtComposer({
-  open, onClose, seriesId, episodeId, atSec, onPosted,
+  open, onClose, seriesId, episodeId, atSec, parentId, onPosted,
 }: {
   open: boolean; onClose: () => void;
   seriesId: string; episodeId: string; atSec: number;
+  /** Set to reply to an existing thought instead of starting a new one. */
+  parentId?: string;
   onPosted?: () => void;
 }) {
   const user = useApp(s => s.user);
@@ -24,7 +26,7 @@ export default function ThoughtComposer({
   const [busy, setBusy] = useState(false);
 
   const post = async () => {
-    if (!user) { showToast("Log in to leave a thought", "info"); return; }
+    if (!user) { showToast(parentId ? "Log in to reply" : "Log in to leave a thought", "info"); return; }
     const body = text.trim();
     if (!body) { showToast("Write something first", "info"); return; }
 
@@ -33,12 +35,12 @@ export default function ThoughtComposer({
       const r = await fetch("/api/thoughts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user._id, seriesId, episodeId, atSec, text: body }),
+        body: JSON.stringify({ userId: user._id, seriesId, episodeId, atSec, text: body, parentId: parentId ?? null }),
       });
       const d = await r.json();
       if (!r.ok || d.error) { showToast(d.error || "Couldn't post", "error"); return; }
 
-      showToast(`Thought pinned at ${formatTime(atSec)}`, "success");
+      showToast(parentId ? "Reply posted" : `Thought pinned at ${formatTime(atSec)}`, "success");
       setText("");
       onPosted?.();
       onClose();
@@ -50,11 +52,11 @@ export default function ThoughtComposer({
   };
 
   return (
-    <Sheet open={open} onClose={onClose} title={`Thought at ${formatTime(atSec)}`}>
+    <Sheet open={open} onClose={onClose} title={parentId ? "Reply" : `Thought at ${formatTime(atSec)}`}>
       <textarea
         className="inp" rows={4} value={text} maxLength={500}
         onChange={e => setText(e.target.value)}
-        placeholder="What did this moment do to you?"
+        placeholder={parentId ? "Write a reply…" : "What did this moment do to you?"}
         style={{ marginBottom: 12 }}
       />
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>

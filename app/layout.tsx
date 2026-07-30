@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ClientRoot from "@/components/shell/ClientRoot";
-import { fontDisplay } from "@/lib/fonts";
 
 export const metadata: Metadata = {
   title: "SWARA FM — Audio stories, in your language",
@@ -19,7 +18,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="lavender-light" suppressHydrationWarning className={fontDisplay.variable}>
+    <html lang="en" data-theme="lavender-light" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous"/>
@@ -36,7 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             if (mode === 'system') {
               mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
             }
-            var colors = ['lavender','rosegold','mint','cyberblue','peach','midnight'];
+            var colors = ['lavender'];
             if (colors.indexOf(color) < 0) color = 'lavender';
             if (mode !== 'dark' && mode !== 'light') mode = 'light';
             document.documentElement.setAttribute('data-theme', color + '-' + mode);

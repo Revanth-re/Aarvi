@@ -101,7 +101,7 @@ export default function SeriesForm({ initial={}, isEdit=false }: Props) {
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:28}}>
         <button className="btn btn-ghost btn-sm" onClick={()=>router.back()} style={{padding:"8px 12px"}}><ArrowLeft size={15}/></button>
         <div>
-          <h1 style={{fontFamily:"var(--font-display)",fontSize:28,fontWeight:600,color:"var(--text)"}}>{isEdit?"Edit Series":"New Audio Series"}</h1>
+          <h1 style={{fontFamily:"var(--ff-sans)",fontSize:28,fontWeight:600,color:"var(--text)"}}>{isEdit?"Edit Series":"New Audio Series"}</h1>
           <p style={{color:"var(--muted)",fontSize:13}}>Fill in the details below</p>
         </div>
       </div>

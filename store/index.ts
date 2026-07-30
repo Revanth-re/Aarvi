@@ -24,7 +24,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   },
   sleepTimerDefault: 0,
   downloads: { wifiOnly: true, autoDownloadNext: false },
-  privacy: { privateListening: false, allowMessages: true, publicThoughts: true },
+  privacy: { privateListening: false, allowMessages: true, publicThoughts: true, isPrivate: false },
 };
 
 /**
@@ -174,3 +174,27 @@ export const useToast = create<ToastStore>((set) => ({
   },
   dismiss: (id) => set((s) => ({ toasts: s.toasts.filter(t => t.id !== id) })),
 }));
+
+// ══════════════════════════════════════════════════════════
+// Data cache — stale-while-revalidate for the main tab screens
+// ══════════════════════════════════════════════════════════
+// In-memory only (not persisted): the point is just "don't reshow a
+// skeleton when you tab back to a screen you already loaded this
+// session," not surviving an app restart. Each screen seeds its
+// useState from getCache(key) on mount (synchronous, no flash), then
+// still fetches in the background and calls setCache to refresh it —
+// so data becomes visible instantly on revisit while staying current.
+interface DataCacheStore {
+  cache: Record<string, unknown>;
+  setCache: (key: string, data: unknown) => void;
+}
+
+export const useDataCache = create<DataCacheStore>((set) => ({
+  cache: {},
+  setCache: (key, data) => set((s) => ({ cache: { ...s.cache, [key]: data } })),
+}));
+
+/** Typed read helper — `useDataCache(s => s.cache[key]) as T | undefined`. */
+export function cacheKeyFor(scope: string, ...parts: (string | undefined)[]): string {
+  return [scope, ...parts.map(p => p ?? "guest")].join(":");
+}

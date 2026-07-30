@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Heart, MessageCircle, Send, Bookmark, Play, Pause, Zap } from "lucide-react";
 import { ShortFeedItem } from "@/types";
-import { useApp, useToast, usePlayer } from "@/store";
+import { useApp, useToast, usePlayer, useDataCache, cacheKeyFor } from "@/store";
 import { formatCount, formatTime } from "@/lib/gamification";
 import { Waveform, EmptyState, Screen } from "@/components/kit";
 import TopBar from "@/components/shell/TopBar";
@@ -23,8 +23,12 @@ export default function ShortsScreen() {
   const showToast = useToast(s => s.show);
   const setPlaying = usePlayer(s => s.setPlaying);
 
-  const [items, setItems] = useState<ShortFeedItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cacheKey = cacheKeyFor("shorts", user?._id);
+  const cached = useDataCache(s => s.cache[cacheKey]) as ShortFeedItem[] | undefined;
+  const setCache = useDataCache(s => s.setCache);
+
+  const [items, setItems] = useState<ShortFeedItem[]>(cached ?? []);
+  const [loading, setLoading] = useState(!cached);
   const [active, setActive] = useState(0);
   const [playing, setLocal] = useState(true);
 
@@ -37,7 +41,7 @@ export default function ShortsScreen() {
     let cancelled = false;
     fetch(`/api/shorts${user ? `?userId=${user._id}` : ""}`)
       .then(r => r.json())
-      .then(d => { if (!cancelled && Array.isArray(d)) setItems(d); })
+      .then(d => { if (!cancelled && Array.isArray(d)) { setItems(d); setCache(cacheKey, d); } })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };

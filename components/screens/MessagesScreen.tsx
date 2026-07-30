@@ -1,16 +1,42 @@
 "use client";
-import { useEffect, useState, useRef } from "react";
-import { ArrowLeft, Send, MessageSquare } from "lucide-react";
-import { Conversation, MessageItem } from "@/types";
+import { Suspense, useEffect, useState, useRef } from "react";
+import { useSearchParams } from "next/navigation";
+import { ArrowLeft, Send, MessageSquare, Smile, Paperclip, X, Loader2 } from "lucide-react";
+import { Conversation, MessageItem, MessageAttachment } from "@/types";
 import { useApp, useToast } from "@/store";
+import { creatorFetch } from "@/lib/creatorFetch";
 import { timeAgo } from "@/lib/gamification";
 import { Screen, EmptyState } from "@/components/kit";
 import TopBar from "@/components/shell/TopBar";
 import Avatar from "@/components/ui/Avatar";
 
+/* eslint-disable @next/next/no-img-element */
+
+// A small fixed palette rather than a full emoji library/GIF-search
+// API — no new dependency or API key needed, and it covers the common
+// reactions people actually reach for in a DM.
+const EMOJIS = [
+  "😀","😂","🥰","😍","😅","😊","😉","😎","🤔","😴",
+  "😢","😭","😡","🥳","👍","👎","👏","🙏","💪","🔥",
+  "❤️","💔","✨","🎉","🎵","🎧","😘","🤗","😱","👀",
+];
+
+// useSearchParams (used to support /messages?with=<userId>, opening a
+// thread directly from someone's profile) requires a Suspense boundary
+// around it in the App Router.
 export default function MessagesScreen() {
+  return (
+    <Suspense fallback={null}>
+      <MessagesScreenInner/>
+    </Suspense>
+  );
+}
+
+function MessagesScreenInner() {
   const user = useApp(s => s.user);
   const showToast = useToast(s => s.show);
+  const searchParams = useSearchParams();
+  const withId = searchParams.get("with");
 
   const [convos, setConvos] = useState<Conversation[]>([]);
   const [openWith, setOpenWith] = useState<Conversation["participants"][0] | null>(null);
@@ -20,7 +46,11 @@ export default function MessagesScreen() {
   const [reloadKey, setReloadKey] = useState(0);
   // Bumped after sending, to re-run the thread fetch.
   const [threadKey, setThreadKey] = useState(0);
+  const [showEmoji, setShowEmoji] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [pendingAttachment, setPendingAttachment] = useState<MessageAttachment | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -31,6 +61,21 @@ export default function MessagesScreen() {
       .catch(() => {});
     return () => { cancelled = true; };
   }, [user?._id, reloadKey]);
+
+  // Arriving via /messages?with=<id> (e.g. the Message button on
+  // someone's profile) — open that thread even if no conversation
+  // exists yet. Fetching their public profile gets the name/image the
+  // thread header needs; GET /api/messages already returns an empty
+  // message list for a conversation that doesn't exist yet.
+  useEffect(() => {
+    if (!user || !withId || withId === user._id) return;
+    let cancelled = false;
+    fetch(`/api/users/${withId}`)
+      .then(r => r.json())
+      .then(d => { if (!cancelled && d?._id) setOpenWith({ _id: d._id, name: d.name, handle: d.handle, image: d.image }); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [user?._id, withId]);
 
   // The fetch is inlined in the effect rather than called through a
   // helper, so the only setState happens inside a .then callback —
@@ -53,26 +98,55 @@ export default function MessagesScreen() {
   const send = async () => {
     if (!user || !openWith) return;
     const text = draft.trim();
-    if (!text) return;
+    if (!text && !pendingAttachment) return;
 
     setBusy(true);
     try {
       const r = await fetch("/api/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user._id, toId: openWith._id, text }),
+        body: JSON.stringify({
+          userId: user._id, toId: openWith._id, text,
+          ...(pendingAttachment ? { attachment: pendingAttachment } : {}),
+        }),
       });
       const d = await r.json();
       if (!r.ok || d.error) { showToast(d.error || "Couldn't send", "error"); return; }
 
       setMessages(prev => [...prev, d.message]);
       setDraft("");
+      setPendingAttachment(null);
+      setShowEmoji(false);
       setReloadKey(k => k + 1);
       setThreadKey(k => k + 1);
     } catch {
       showToast("Network error", "error");
     } finally {
       setBusy(false);
+    }
+  };
+
+  // Picking a file uploads it immediately and stages it as a small
+  // preview above the input — the caption (if any) is whatever's
+  // already typed in the draft, and Send fires both together.
+  const pickAttachment = async (file: File) => {
+    const isVideo = file.type.startsWith("video/");
+    const isImage = file.type.startsWith("image/");
+    if (!isImage && !isVideo) { showToast("Choose an image, GIF, or video", "error"); return; }
+
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await creatorFetch("/api/upload", { method: "POST", body: fd });
+      const d = await r.json();
+      if (!r.ok || !d.url) throw new Error(d.error || "Upload failed");
+      setPendingAttachment({ url: d.url, kind: isVideo ? "video" : "image" });
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Upload failed", "error");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
     }
   };
 
@@ -108,14 +182,41 @@ export default function MessagesScreen() {
             {messages.map(m => {
               const mine = m.senderId === user._id;
               return (
-                <div key={m._id} style={{
-                  alignSelf: mine ? "flex-end" : "flex-start",
-                  maxWidth: "78%", padding: "9px 13px", borderRadius: 16,
-                  background: mine ? "var(--grad)" : "var(--surface2)",
-                  color: mine ? "#fff" : "var(--text)",
-                  fontSize: 13.5, lineHeight: 1.45,
-                }}>
-                  {m.text}
+                <div key={m._id} style={{ alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "78%" }}>
+                  {m.storyRef && (
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: 8, marginBottom: 4,
+                      padding: "6px 10px", borderRadius: "14px 14px 4px 4px",
+                      background: "var(--surface2)", border: "1px solid var(--border)",
+                    }}>
+                      {m.storyRef.mediaUrl ? (
+                        <img src={m.storyRef.mediaUrl} alt="" style={{ width: 28, height: 28, borderRadius: 8, objectFit: "cover" }}/>
+                      ) : (
+                        <div style={{ width: 28, height: 28, borderRadius: 8, background: "var(--grad)" }}/>
+                      )}
+                      <span style={{ fontSize: 11, color: "var(--text3)" }}>
+                        {mine ? "Replied to their story" : "Replied to your story"}
+                      </span>
+                    </div>
+                  )}
+                  {m.attachment && (
+                    m.attachment.kind === "video" ? (
+                      <video src={m.attachment.url} controls playsInline
+                        style={{ display: "block", maxWidth: "100%", borderRadius: 14, marginBottom: m.text ? 4 : 0 }}/>
+                    ) : (
+                      <img src={m.attachment.url} alt="" style={{ display: "block", maxWidth: "100%", maxHeight: 260, borderRadius: 14, marginBottom: m.text ? 4 : 0 }}/>
+                    )
+                  )}
+                  {!!m.text && (
+                    <div style={{
+                      padding: "9px 13px", borderRadius: 16,
+                      background: mine ? "var(--grad)" : "var(--surface2)",
+                      color: mine ? "#fff" : "var(--text)",
+                      fontSize: 13.5, lineHeight: 1.45,
+                    }}>
+                      {m.text}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -123,17 +224,68 @@ export default function MessagesScreen() {
           </div>
 
           <div style={{
-            display: "flex", gap: 8, padding: 12,
             borderTop: "1px solid var(--border)",
             marginBottom: "calc(var(--nav-h) + env(safe-area-inset-bottom, 0px))",
           }}>
-            <input className="inp" value={draft} onChange={e => setDraft(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-              placeholder="Message…" aria-label="Message"/>
-            <button onClick={send} disabled={busy || !draft.trim()} aria-label="Send"
-              className="btn btn-primary" style={{ padding: "0 16px", flex: "none" }}>
-              <Send size={16}/>
-            </button>
+            {showEmoji && (
+              <div style={{
+                display: "grid", gridTemplateColumns: "repeat(10,1fr)", gap: 2,
+                padding: "10px 12px 4px", borderBottom: "1px solid var(--border)",
+              }}>
+                {EMOJIS.map(e => (
+                  <button key={e} onClick={() => setDraft(d => d + e)} aria-label={`Insert ${e}`}
+                    style={{ background: "none", border: "none", cursor: "pointer", fontSize: 19, padding: 4, lineHeight: 1 }}>
+                    {e}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {(pendingAttachment || uploading) && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px 0" }}>
+                {uploading ? (
+                  <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text3)" }}>
+                    <Loader2 size={14} className="spin"/>Uploading…
+                  </span>
+                ) : pendingAttachment && (
+                  <div style={{ position: "relative", display: "inline-block" }}>
+                    {pendingAttachment.kind === "video" ? (
+                      <video src={pendingAttachment.url} style={{ height: 64, borderRadius: 10, display: "block" }}/>
+                    ) : (
+                      <img src={pendingAttachment.url} alt="" style={{ height: 64, borderRadius: 10, display: "block" }}/>
+                    )}
+                    <button onClick={() => setPendingAttachment(null)} aria-label="Remove attachment"
+                      style={{
+                        position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%",
+                        background: "var(--text)", color: "var(--bg)", border: "none", cursor: "pointer",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>
+                      <X size={12}/>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 6, padding: 12, alignItems: "center" }}>
+              <input ref={fileRef} type="file" accept="image/*,video/*" hidden disabled={uploading}
+                onChange={e => { const f = e.target.files?.[0]; if (f) pickAttachment(f); }}/>
+              <button onClick={() => fileRef.current?.click()} disabled={uploading} aria-label="Attach photo or video"
+                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text2)", display: "flex", flex: "none", padding: 6 }}>
+                <Paperclip size={19}/>
+              </button>
+              <button onClick={() => setShowEmoji(v => !v)} aria-label="Emoji"
+                style={{ background: "none", border: "none", cursor: "pointer", color: showEmoji ? "var(--accent)" : "var(--text2)", display: "flex", flex: "none", padding: 6 }}>
+                <Smile size={19}/>
+              </button>
+              <input className="inp" value={draft} onChange={e => setDraft(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+                placeholder="Message…" aria-label="Message"/>
+              <button onClick={send} disabled={busy || uploading || (!draft.trim() && !pendingAttachment)} aria-label="Send"
+                className="btn btn-primary" style={{ padding: "0 16px", flex: "none" }}>
+                <Send size={16}/>
+              </button>
+            </div>
           </div>
         </div>
       </>

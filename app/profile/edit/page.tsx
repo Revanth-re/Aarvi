@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Camera, Loader2 } from "lucide-react";
 import { useApp, useToast } from "@/store";
+import { creatorFetch } from "@/lib/creatorFetch";
 import { Screen } from "@/components/kit";
 import TopBar from "@/components/shell/TopBar";
 import Avatar from "@/components/ui/Avatar";
@@ -15,7 +16,26 @@ export default function EditProfilePage() {
   const [name, setName] = useState(user?.name ?? "");
   const [handle, setHandle] = useState(user?.handle ?? "");
   const [bio, setBio] = useState(user?.bio ?? "");
+  const [image, setImage] = useState(user?.image ?? "");
+  const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  const pickPhoto = async (file: File) => {
+    if (!file.type.startsWith("image/")) { showToast("Choose an image file", "error"); return; }
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await creatorFetch("/api/upload", { method: "POST", body: fd });
+      const d = await r.json();
+      if (!r.ok || !d.url) throw new Error(d.error || "Upload failed");
+      setImage(d.url);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Upload failed", "error");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   if (!user) {
     return (<><TopBar title="Edit profile"/><Screen><p style={{ color: "var(--text3)" }}>Log in first.</p></Screen></>);
@@ -27,7 +47,7 @@ export default function EditProfilePage() {
       const r = await fetch(`/api/users/${user._id}/profile`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, handle, bio }),
+        body: JSON.stringify({ name, handle, bio, image }),
       });
       const d = await r.json();
       if (!r.ok || d.error) { showToast(d.error || "Couldn't save", "error"); return; }
@@ -52,7 +72,18 @@ export default function EditProfilePage() {
         </button>
 
         <div style={{ display: "flex", justifyContent: "center" }}>
-          <Avatar name={name} image={user.image} size={80}/>
+          <label style={{ position: "relative", cursor: "pointer", display: "inline-block" }}>
+            <input type="file" accept="image/*" hidden disabled={uploading}
+              onChange={e => { const f = e.target.files?.[0]; if (f) pickPhoto(f); }}/>
+            <Avatar name={name} image={image} size={80}/>
+            <span style={{
+              position: "absolute", bottom: 0, right: 0, width: 28, height: 28, borderRadius: "50%",
+              background: "var(--accent)", color: "#fff", display: "flex", alignItems: "center",
+              justifyContent: "center", border: "2px solid var(--surface)",
+            }}>
+              {uploading ? <Loader2 size={13} className="spin"/> : <Camera size={13}/>}
+            </span>
+          </label>
         </div>
 
         <label style={label}>Display name

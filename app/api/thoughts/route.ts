@@ -52,10 +52,11 @@ async function hydrate(rows: any[], me: string): Promise<Thought[]> {
   return out;
 }
 
-// GET /api/thoughts?userId=&episodeId=&seriesId=&authorId=&limit=
+// GET /api/thoughts?userId=&episodeId=&seriesId=&authorId=&parentId=&limit=
 //
-// One endpoint serves four surfaces: the home feed, an episode's
-// margin notes, a profile's own thoughts, and Library → Thoughts.
+// One endpoint serves five surfaces: an episode's margin notes, a
+// profile's own thoughts, Library → Thoughts, Series → Thoughts, and —
+// with ?parentId= — the replies under one specific thought.
 export async function GET(req: NextRequest) {
   try {
     await connectDB();
@@ -63,7 +64,9 @@ export async function GET(req: NextRequest) {
     const me = p.get("userId") || "";
     const limit = Math.min(parseInt(p.get("limit") || "20"), 60);
 
-    const q: any = { parentId: null };
+    // Default is top-level thoughts only (parentId: null); passing
+    // ?parentId=<id> switches to fetching that thought's own replies.
+    const q: any = p.get("parentId") ? { parentId: p.get("parentId") } : { parentId: null };
     if (p.get("episodeId")) q.episodeId = p.get("episodeId");
     if (p.get("seriesId"))  q.seriesId  = p.get("seriesId");
 
@@ -75,9 +78,12 @@ export async function GET(req: NextRequest) {
       q.isPublic = true;
     }
 
-    // Inside an episode, order by position in the audio; everywhere
+    // A reply thread reads chronologically, oldest first. Inside an
+    // episode (no parentId), order by position in the audio. Everywhere
     // else, newest first.
-    const sort: any = p.get("episodeId") ? { atSec: 1 } : { createdAt: -1 };
+    const sort: any = p.get("parentId") ? { createdAt: 1 }
+      : p.get("episodeId") ? { atSec: 1 }
+      : { createdAt: -1 };
 
     const rows = await ThoughtModel.find(q).sort(sort).limit(limit).lean<any[]>();
     return NextResponse.json(await hydrate(rows, me));

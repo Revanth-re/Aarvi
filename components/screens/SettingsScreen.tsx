@@ -122,6 +122,7 @@ export default function SettingsScreen() {
 
         {/* ── Privacy ── */}
         <Group icon={<Shield size={15}/>} title="Privacy" sub="You're in control">
+          <Toggle label="Private account (approve new followers)" on={settings.privacy.isPrivate} set={v => setGroup("privacy", { isPrivate: v })}/>
           <Toggle label="Private listening (hide activity)" on={settings.privacy.privateListening} set={v => setGroup("privacy", { privateListening: v })}/>
           <Toggle label="Allow messages from anyone" on={settings.privacy.allowMessages} set={v => setGroup("privacy", { allowMessages: v })}/>
           <Toggle label="Show my 💬 thoughts publicly" on={settings.privacy.publicThoughts} set={v => setGroup("privacy", { publicThoughts: v })} last/>

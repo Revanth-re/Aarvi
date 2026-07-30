@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Heart, Download, History, MessageCircle } from "lucide-react";
 import { Series, Thought } from "@/types";
-import { useApp } from "@/store";
+import { useApp, useDataCache, cacheKeyFor } from "@/store";
 import { Screen, Cover, EmptyState } from "@/components/kit";
 import TopBar from "@/components/shell/TopBar";
 import ThoughtCard from "./ThoughtCard";
@@ -20,25 +20,36 @@ export default function LibraryScreen() {
   const liked = useApp(s => s.liked);
 
   const [tab, setTab] = useState<Tab>("saved");
-  const [saved, setSaved] = useState<Series[]>([]);
-  const [history, setHistory] = useState<{ series: Series; percent: number }[]>([]);
-  const [thoughts, setThoughts] = useState<Thought[]>([]);
-  const [loading, setLoading] = useState(true);
 
   // Signed-out visitors keep favourites locally; signed-in ones on the
   // account. Same fallback the rest of the app uses.
   const favoriteIds = user ? (user.favorites ?? []) : liked;
   const favKey = favoriteIds.join(",");
 
+  const setCache = useDataCache(s => s.setCache);
+  const savedKey = cacheKeyFor("library-saved", favKey);
+  const historyKey = cacheKeyFor("library-history", user?._id);
+  const thoughtsKey = cacheKeyFor("library-thoughts", user?._id);
+  const cachedSaved = useDataCache(s => s.cache[savedKey]) as Series[] | undefined;
+  const cachedHistory = useDataCache(s => s.cache[historyKey]) as { series: Series; percent: number }[] | undefined;
+  const cachedThoughts = useDataCache(s => s.cache[thoughtsKey]) as Thought[] | undefined;
+
+  const [saved, setSaved] = useState<Series[]>(cachedSaved ?? []);
+  const [history, setHistory] = useState<{ series: Series; percent: number }[]>(cachedHistory ?? []);
+  const [thoughts, setThoughts] = useState<Thought[]>(cachedThoughts ?? []);
+  const [loading, setLoading] = useState(!cachedSaved);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!favoriteIds.length) { setSaved([]); setLoading(false); return; }
+      if (!favoriteIds.length) { setSaved([]); setCache(savedKey, []); setLoading(false); return; }
       const list = await Promise.all(
         favoriteIds.map(id => fetch(`/api/series/${id}`).then(r => r.json()).catch(() => null))
       );
       if (cancelled) return;
-      setSaved(list.filter((s): s is Series => !!s?._id));
+      const rows = list.filter((s): s is Series => !!s?._id);
+      setSaved(rows);
+      setCache(savedKey, rows);
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -53,7 +64,9 @@ export default function LibraryScreen() {
       .then(r => r.json())
       .then(d => {
         if (cancelled || !Array.isArray(d.continue)) return;
-        setHistory(d.continue.map((c: { series: Series; percent: number }) => ({ series: c.series, percent: c.percent })));
+        const rows = d.continue.map((c: { series: Series; percent: number }) => ({ series: c.series, percent: c.percent }));
+        setHistory(rows);
+        setCache(historyKey, rows);
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -64,7 +77,7 @@ export default function LibraryScreen() {
     let cancelled = false;
     fetch(`/api/thoughts?userId=${user._id}&authorId=${user._id}&limit=40`)
       .then(r => r.json())
-      .then(d => { if (!cancelled && Array.isArray(d)) setThoughts(d); })
+      .then(d => { if (!cancelled && Array.isArray(d)) { setThoughts(d); setCache(thoughtsKey, d); } })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [user?._id]);
@@ -129,7 +142,10 @@ export default function LibraryScreen() {
         {tab === "thoughts" && (
           thoughts.length ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {thoughts.map(t => <ThoughtCard key={t._id} thought={t}/>)}
+              {thoughts.map(t => (
+                <ThoughtCard key={t._id} thought={t}
+                  onDeleted={id => setThoughts(prev => prev.filter(x => x._id !== id))}/>
+              ))}
             </div>
           ) : (
             <EmptyState icon={<MessageCircle size={22}/>} title="No thoughts yet"

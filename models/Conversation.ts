@@ -16,11 +16,34 @@ export function conversationKey(a: string, b: string) {
   return [a, b].sort().join(":");
 }
 
+// Set when a message is a reply to someone's story (the Instagram
+// "swipe up to reply" pattern) — a small reference card renders above
+// the message text rather than the reply becoming a public comment.
+const StoryRefSchema = new Schema({
+  storyId:  { type: String, required: true },
+  kind:     { type: String, enum: ["audio", "photo", "quote"], required: true },
+  mediaUrl: { type: String, default: "" },
+  caption:  { type: String, default: "" },
+}, { _id: false });
+
+// An image, video, or GIF attached to a DM. GIFs are just image/gif
+// files picked from the same file input as photos — they need no
+// special handling since an <img> tag animates them natively; only
+// real video files (mp4/webm/etc.) get "video" and a <video> tag.
+const AttachmentSchema = new Schema({
+  url:  { type: String, required: true },
+  kind: { type: String, enum: ["image", "video"], required: true },
+}, { _id: false });
+
 const MessageSchema = new Schema({
   conversationId: { type: String, required: true, index: true },
   senderId:       { type: String, required: true },
-  text:           { type: String, required: true, trim: true, maxlength: 2000 },
+  // Not required anymore: an attachment-only message (no caption) is
+  // valid, so this defaults to "" rather than requiring text.
+  text:           { type: String, default: "", trim: true, maxlength: 2000 },
   readBy:         [{ type: String }],
+  storyRef:       { type: StoryRefSchema, default: undefined },
+  attachment:     { type: AttachmentSchema, default: undefined },
   createdAt:      { type: Date, default: Date.now, index: true },
 });
 

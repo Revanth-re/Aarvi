@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Moon, TrendingUp, Sun, Sparkles, Play, UserPlus, Check, Globe } from "lucide-react";
 import { DiscoverPayload, VIBES, LANGUAGES, CreatorCard } from "@/types";
-import { useApp, usePlayer, useToast } from "@/store";
+import { useApp, usePlayer, useToast, useDataCache, cacheKeyFor } from "@/store";
 import { Screen, SectionHeader, ShowCard, ShowCardSkeleton, Cover } from "@/components/kit";
 import TopBar from "@/components/shell/TopBar";
 import Avatar from "@/components/ui/Avatar";
@@ -19,8 +19,13 @@ export default function DiscoverScreen() {
 
   const [vibe, setVibe] = useState("");
   const [language, setLanguage] = useState("All");
-  const [data, setData] = useState<DiscoverPayload | null>(null);
-  const [loaded, setLoaded] = useState(false);
+
+  const cacheKey = cacheKeyFor("discover", user?._id, vibe || "none", language);
+  const cached = useDataCache(s => s.cache[cacheKey]) as DiscoverPayload | undefined;
+  const setCache = useDataCache(s => s.setCache);
+
+  const [data, setData] = useState<DiscoverPayload | null>(cached ?? null);
+  const [loaded, setLoaded] = useState(!!cached);
 
   // Derived, so nothing has to setState before the effect's first
   // await — which is what causes a cascading render.
@@ -36,7 +41,7 @@ export default function DiscoverScreen() {
 
     fetch(`/api/discover?${qs}`)
       .then(r => r.json())
-      .then(d => { if (!cancelled && !d.error) setData(d); })
+      .then(d => { if (!cancelled && !d.error) { setData(d); setCache(cacheKey, d); } })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoaded(true); });
 
@@ -62,7 +67,10 @@ export default function DiscoverScreen() {
       });
       const d = await r.json();
       if (d.error) throw new Error(d.error);
-      showToast(d.status === "requested" ? "Follow request sent" : "Unfollowed", "success");
+      const label = d.status === "requested" ? "Follow request sent"
+        : d.status === "following" ? "Followed"
+        : "Unfollowed";
+      showToast(label, "success");
     } catch {
       setData(prev => prev && {
         ...prev,

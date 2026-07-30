@@ -33,6 +33,9 @@ const SettingsSchema = new Schema({
     privateListening: { type: Boolean, default: false },
     allowMessages:    { type: Boolean, default: true },
     publicThoughts:   { type: Boolean, default: true },
+    // Instagram-style: a public account auto-accepts follows; a
+    // private one queues them as a request the owner approves/declines.
+    isPrivate:        { type: Boolean, default: false },
   },
 }, { _id: false });
 
@@ -50,9 +53,18 @@ const PlaylistSchema = new Schema({
 
 const UserSchema = new Schema({
   googleId: { type: String, unique: true, sparse: true },
-  email:    { type: String, required: true, unique: true },
+  // Optional now: a credentials (username/mobile + password) account
+  // never collects one. sparse so multiple accounts with no email
+  // don't collide on the unique index.
+  email:    { type: String, unique: true, sparse: true },
   name:     { type: String },
   image:    { type: String },
+
+  // ─── Username/mobile + password login (alongside Google) ───
+  /** E.164-ish digits, no formatting. Sparse-unique like handle/email. */
+  mobile:   { type: String, unique: true, sparse: true, trim: true },
+  /** bcrypt hash. Never selected by default — see lib/password.ts. */
+  password: { type: String, select: false },
 
   // @handle shown across the app. Sparse-unique so the many existing
   // users without one don't all collide on null.

@@ -36,6 +36,8 @@ export async function GET(req: NextRequest) {
           senderId: m.senderId, text: m.text,
           createdAt: iso(m.createdAt),
           read: (m.readBy || []).includes(me),
+          ...(m.storyRef ? { storyRef: m.storyRef } : {}),
+          ...(m.attachment ? { attachment: m.attachment } : {}),
         })),
       });
     }
@@ -63,7 +65,8 @@ export async function GET(req: NextRequest) {
         participants: other ? [publicUser(other)] : [],
         lastMessage: last ? {
           _id: idOf(last._id), conversationId: idOf(c._id), senderId: last.senderId,
-          text: last.text, createdAt: iso(last.createdAt), read: true,
+          text: last.text || (last.attachment?.kind === "video" ? "Video" : last.attachment ? "Photo" : ""),
+          createdAt: iso(last.createdAt), read: true,
         } : undefined,
         unread,
         updatedAt: iso(c.lastMessageAt),
@@ -76,17 +79,24 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/messages — { userId, toId, text }
+// POST /api/messages — { userId, toId, text, storyRef?, attachment? }
+// storyRef: { storyId, kind, mediaUrl, caption } — set when this
+// message is a reply to a story rather than a normal DM.
+// attachment: { url, kind: "image" | "video" } — an image/GIF/video
+// sent from the thread's attach button, with or without caption text.
 export async function POST(req: NextRequest) {
   try {
     await connectDB();
-    const { userId, toId, text } = await req.json();
+    const { userId, toId, text, storyRef, attachment } = await req.json();
 
     if (!userId || !toId) return NextResponse.json({ error: "userId and toId are required" }, { status: 400 });
     if (userId === toId) return NextResponse.json({ error: "You can't message yourself" }, { status: 400 });
 
+    // A story reply or an attachment can be sent with just that and no
+    // typed caption — but an entirely empty message needs *some*
+    // content to send.
     const body = String(text ?? "").trim();
-    if (!body) return NextResponse.json({ error: "Message is empty" }, { status: 400 });
+    if (!body && !storyRef && !attachment?.url) return NextResponse.json({ error: "Message is empty" }, { status: 400 });
 
     // Respect the recipient's "Allow messages from anyone" setting —
     // if it's off, only people they follow can reach them.
@@ -108,17 +118,35 @@ export async function POST(req: NextRequest) {
       { upsert: true, new: true }
     );
 
+    // A bare story reply with no caption still gets a fallback caption
+    // so the thread list has something to preview; a bare attachment
+    // doesn't need one — the thread list falls back to "Photo"/"Video".
+    const fallbackText = !body && storyRef ? "Replied to your story" : body;
+
     const msg = await MessageModel.create({
       conversationId: idOf(convo._id),
       senderId: userId,
-      text: body.slice(0, 2000),
+      text: fallbackText.slice(0, 2000),
       readBy: [userId],
+      ...(storyRef?.storyId ? {
+        storyRef: {
+          storyId: String(storyRef.storyId),
+          kind: storyRef.kind,
+          mediaUrl: storyRef.mediaUrl || "",
+          caption: storyRef.caption || "",
+        },
+      } : {}),
+      ...(attachment?.url ? {
+        attachment: { url: String(attachment.url), kind: attachment.kind === "video" ? "video" : "image" },
+      } : {}),
     });
 
     return NextResponse.json({
       message: {
         _id: idOf(msg._id), conversationId: idOf(convo._id),
         senderId: userId, text: msg.text, createdAt: iso(msg.createdAt), read: true,
+        ...(msg.storyRef ? { storyRef: msg.storyRef } : {}),
+        ...(msg.attachment ? { attachment: msg.attachment } : {}),
       },
     }, { status: 201 });
   } catch (e) {

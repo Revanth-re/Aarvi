@@ -5,10 +5,11 @@ import { notifyUser } from "@/lib/notify";
 
 type P = { params: Promise<{ id: string }> };
 
-// POST: send/cancel a follow request, or unfollow, for user [id]
-// following `targetId`. Instagram-style — following someone doesn't
-// take effect until they accept, except unfollowing an already-
-// accepted follow, which is immediate.
+// POST: follow/unfollow (or request/cancel-request) user [id] →
+// `targetId`. Instagram-style: a public account (the default) is
+// followed immediately; a private account (settings.privacy.isPrivate)
+// queues a request the owner has to accept first. Unfollowing an
+// already-accepted follow is always immediate either way.
 // Body: { targetId: string }
 export async function POST(req: NextRequest, { params }: P) {
   try {
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest, { params }: P) {
     actor.followRequestsSent = actor.followRequestsSent || [];
     target.followRequestsReceived = target.followRequestsReceived || [];
 
-    let status: "none" | "requested";
+    let status: "none" | "requested" | "following";
 
     if (actor.following.includes(targetId)) {
       // Already following (accepted) → unfollow, immediate.
@@ -42,8 +43,8 @@ export async function POST(req: NextRequest, { params }: P) {
       target.followRequestsReceived = target.followRequestsReceived.filter((x: string) => x !== id);
       status = "none";
       await Promise.all([actor.save(), target.save()]);
-    } else {
-      // Nothing yet → send a new request.
+    } else if (target.settings?.privacy?.isPrivate) {
+      // Private account → send a request, wait for approval.
       actor.followRequestsSent.push(targetId);
       target.followRequestsReceived.push(id);
       status = "requested";
@@ -54,7 +55,22 @@ export async function POST(req: NextRequest, { params }: P) {
         category: "social",
         title: `${actor.name || "Someone"} wants to follow you`,
         message: "Tap to review the request.",
-        link: "/profile?tab=requests",
+        link: "/profile/requests",
+        fromUserId: id,
+        fromUserName: actor.name,
+      });
+    } else {
+      // Public account (the default) → follow immediately, no approval needed.
+      actor.following.push(targetId);
+      status = "following";
+      await actor.save();
+
+      await notifyUser(targetId, {
+        type: "new_follower",
+        category: "social",
+        title: `${actor.name || "Someone"} started following you`,
+        message: "",
+        link: `/u/${id}`,
         fromUserId: id,
         fromUserName: actor.name,
       });

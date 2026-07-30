@@ -20,10 +20,13 @@ export async function GET(_: NextRequest, { params }: P) {
     return NextResponse.json({
       _id: user._id.toString(),
       name: user.name || "Listener",
+      handle: user.handle || "",
+      bio: user.bio || "",
       image: user.image || "",
       createdAt: user.createdAt,
       followerCount,
       followingCount: (user.following || []).length,
+      isPrivate: !!user.settings?.privacy?.isPrivate,
     });
   } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }
 }

@@ -15,9 +15,11 @@ export async function GET(_: NextRequest, { params }: P) {
     const ids = owner.following || [];
     if (ids.length === 0) return NextResponse.json({ following: [] });
 
-    const users = await UserModel.find({ _id: { $in: ids } }).select("name image").lean();
+    const users = await UserModel.find({ _id: { $in: ids } }).select("name image handle").lean();
     return NextResponse.json({
-      following: users.map(u => ({ _id: u._id.toString(), name: u.name || "Listener", image: u.image || "" })),
+      following: users.map(u => ({
+        _id: u._id.toString(), name: u.name || "Listener", image: u.image || "", handle: u.handle || "",
+      })),
     });
   } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }
 }

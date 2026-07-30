@@ -184,7 +184,10 @@ export default function SeriesDetail({ seriesId }: { seriesId: string }) {
             sub="Notes listeners pinned inside these episodes"/>
           {thoughts.length ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {thoughts.map(t => <ThoughtCard key={t._id} thought={t}/>)}
+              {thoughts.map(t => (
+                <ThoughtCard key={t._id} thought={t}
+                  onDeleted={id => setThoughts(prev => prev.filter(x => x._id !== id))}/>
+              ))}
             </div>
           ) : (
             <p style={{ fontSize: 12.5, color: "var(--text3)" }}>

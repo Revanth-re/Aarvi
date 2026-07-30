@@ -8,18 +8,21 @@ import { idOf } from "@/lib/serialize";
 
 type P = { params: Promise<{ id: string }> };
 
-// PUT /api/users/[id]/profile — { name, handle, bio }
+// PUT /api/users/[id]/profile — { name, handle, bio, image }
 export async function PUT(req: NextRequest, { params }: P) {
   try {
     await connectDB();
     const { id } = await params;
-    const { name, handle, bio } = await req.json();
+    const { name, handle, bio, image } = await req.json();
 
     const user = await UserModel.findById(id);
     if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     if (typeof name === "string") user.name = name.trim().slice(0, 50);
     if (typeof bio === "string") user.bio = bio.trim().slice(0, 160);
+    // Empty string clears the photo (back to the initials avatar) —
+    // only skip when the field wasn't sent at all.
+    if (typeof image === "string") user.image = image.slice(0, 500);
 
     if (typeof handle === "string" && handle.trim()) {
       const clean = handleFrom(handle);
@@ -34,7 +37,7 @@ export async function PUT(req: NextRequest, { params }: P) {
 
     return NextResponse.json({
       ok: true,
-      user: { _id: idOf(user._id), name: user.name, handle: user.handle, bio: user.bio },
+      user: { _id: idOf(user._id), name: user.name, handle: user.handle, bio: user.bio, image: user.image },
     });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

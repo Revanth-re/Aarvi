@@ -8,9 +8,11 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      // Single standard font everywhere — "display" and "body" both
+      // alias the same sans stack now (no separate logo/wordmark font).
       fontFamily: {
-        display: ["var(--font-display)", "serif"],
-        body: ["var(--font-body)", "sans-serif"],
+        display: ["var(--ff-sans)", "sans-serif"],
+        body: ["var(--ff-sans)", "sans-serif"],
         mono: ["var(--font-mono)", "monospace"],
       },
       colors: {

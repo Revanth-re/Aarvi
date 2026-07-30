@@ -1,14 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Sparkles, Headphones, MessageCircle } from "lucide-react";
-import { Series, Thought } from "@/types";
-import { useApp, usePlayer, useToast } from "@/store";
+import { Sparkles, Headphones } from "lucide-react";
+import { Series } from "@/types";
+import { useApp, usePlayer, useToast, useDataCache, cacheKeyFor } from "@/store";
 import { DAILY_GOAL_MINUTES } from "@/lib/gamification";
-import { Screen, SectionHeader, ShowCard, ShowCardSkeleton, Cover, EmptyState } from "@/components/kit";
+import { Screen, SectionHeader, ShowCard, ShowCardSkeleton, Cover } from "@/components/kit";
 import TopBar from "@/components/shell/TopBar";
 import StoryRail from "./StoryRail";
-import ThoughtCard from "./ThoughtCard";
 
 interface ContinueRow {
   series: Series; episodeId: string; episodeTitle: string;
@@ -28,22 +27,24 @@ export default function HomeScreen() {
   const requestSeek = usePlayer(s => s.requestSeek);
   const showToast = useToast(s => s.show);
 
-  const [data, setData] = useState<HomeData | null>(null);
-  const [thoughts, setThoughts] = useState<Thought[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cacheKey = cacheKeyFor("home", user?._id);
+  const cached = useDataCache(s => s.cache[cacheKey]) as HomeData | undefined;
+  const setCache = useDataCache(s => s.setCache);
+
+  // Seeded from the cache, if any, so tabbing back to Home shows the
+  // already-loaded data immediately instead of a skeleton — the effect
+  // below still refetches in the background to keep it current.
+  const [data, setData] = useState<HomeData | null>(cached ?? null);
+  const [loading, setLoading] = useState(!cached);
 
   useEffect(() => {
     let cancelled = false;
     const qs = user ? `?userId=${user._id}` : "";
 
-    Promise.all([
-      fetch(`/api/home${qs}`).then(r => r.json()),
-      fetch(`/api/thoughts${qs ? qs + "&" : "?"}limit=6`).then(r => r.json()),
-    ])
-      .then(([h, t]) => {
+    fetch(`/api/home${qs}`).then(r => r.json())
+      .then(h => {
         if (cancelled) return;
-        if (!h.error) setData(h);
-        if (Array.isArray(t)) setThoughts(t);
+        if (!h.error) { setData(h); setCache(cacheKey, h); }
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -148,26 +149,6 @@ export default function HomeScreen() {
                 ? data.underTen.map(s => <ShowCard key={s._id} series={s}/>)
                 : <EmptyRail/>}
           </div>
-        </section>
-
-        {/* ── Thoughts ── */}
-        <section>
-          <SectionHeader
-            title="Thoughts"
-            sub="Timestamped notes listeners left inside episodes"
-            icon={<MessageCircle size={16} color="var(--accent)"/>}
-          />
-          {thoughts.length ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {thoughts.map(t => <ThoughtCard key={t._id} thought={t}/>)}
-            </div>
-          ) : (
-            <EmptyState
-              icon={<MessageCircle size={22}/>}
-              title="No thoughts yet"
-              body="Play any episode and tap “Leave a thought” in the player to pin a note to the exact second that got you."
-            />
-          )}
         </section>
       </Screen>
     </>
