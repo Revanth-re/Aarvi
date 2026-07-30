@@ -57,6 +57,8 @@ export interface Episode {
 export interface Series extends Partial<BaseEntity> {
   _id: string; title: string; description: string; coverImage: string;
   genre: string; language: string; narrator: string; rating: number;
+  /** Real review count backing `rating` — 0 means it's still the seeded placeholder. */
+  ratingCount?: number;
   totalEpisodes: number; episodes: Episode[]; tags: string[];
   isFeatured: boolean; isTrending: boolean; totalPlays: number; createdAt: string;
   /** Creator account that owns this series, if any. */
@@ -174,6 +176,18 @@ export interface Thought {
   text: string;
   likeCount: number; liked: boolean; replyCount: number;
   parentId?: string | null;
+  createdAt: string;
+}
+
+// ══════════════════════════════════════════════════════════
+// Reviews — one star rating + optional written review per (series, user)
+// ══════════════════════════════════════════════════════════
+export interface Review {
+  _id: string;
+  seriesId: string;
+  userId: string; userName: string; userHandle: string; userImage: string;
+  stars: number;
+  text: string;
   createdAt: string;
 }
 

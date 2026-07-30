@@ -188,6 +188,15 @@ export default function CreatorSeriesForm({ initial }: Props) {
                   <span className="truncate" style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
                     {ep.title || `Episode ${i + 1}`}
                   </span>
+                  {ep.isLocked && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, color: "var(--coin)", flex: "none",
+                      background: "color-mix(in srgb, var(--coin) 14%, transparent)",
+                      borderRadius: 999, padding: "2px 8px",
+                    }}>
+                      Paid
+                    </span>
+                  )}
                   <button onClick={e => { e.stopPropagation(); delEp(i); }} style={{
                     background: "none", border: "none", cursor: "pointer", color: "var(--danger)", padding: 4,
                   }}>
@@ -212,6 +221,23 @@ export default function CreatorSeriesForm({ initial }: Props) {
                         Duration: {Math.floor((ep.duration || 0) / 60)}:{String((ep.duration || 0) % 60).padStart(2, "0")}
                       </div>
                     )}
+                    <Field label="Access">
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button type="button" onClick={() => setEp(i, "isLocked", false)}
+                          className={`btn btn-xs ${!ep.isLocked ? "btn-primary" : "btn-soft"}`} style={{ flex: 1, justifyContent: "center" }}>
+                          Free
+                        </button>
+                        <button type="button" onClick={() => setEp(i, "isLocked", true)}
+                          className={`btn btn-xs ${ep.isLocked ? "btn-primary" : "btn-soft"}`} style={{ flex: 1, justifyContent: "center" }}>
+                          Paid
+                        </button>
+                      </div>
+                      <p style={{ fontSize: 11, color: "var(--text3)", margin: "6px 0 0" }}>
+                        {ep.isLocked
+                          ? "Locked — listeners unlock it by spending coins or watching an ad."
+                          : "Anyone can listen without unlocking."}
+                      </p>
+                    </Field>
                   </div>
                 )}
               </div>

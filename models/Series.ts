@@ -12,6 +12,11 @@ const EpSchema = new Schema({
   duration:{type:Number,default:0}, audioUrl:{type:String,default:""},
   episodeNumber:{type:Number,required:true}, isLocked:{type:Boolean,default:false},
   transcript:{type:String,default:""}, playCount:{type:Number,default:0},
+  // Times this locked episode has been unlocked by watching an ad
+  // rather than spending coins — not used for anything yet (no ad
+  // network is wired in, no creator payout system exists), just
+  // banked for whenever that monetization/payout work happens.
+  adUnlockCount:{type:Number,default:0},
   // Auto-generated (Gemini) timestamped transcript, used for the
   // synced/karaoke-style highlighting view. Separate from the plain
   // `transcript` field above, which stays editable/manual.
@@ -22,7 +27,12 @@ const SeriesSchema = new Schema({
   title:{type:String,required:true}, description:{type:String,required:true},
   coverImage:{type:String,default:""}, genre:{type:String,required:true},
   language:{type:String,default:"English"}, narrator:{type:String,default:""},
-  rating:{type:Number,default:4.5}, totalEpisodes:{type:Number,default:0},
+  // `rating` starts as a seeded placeholder for empty catalog content;
+  // once real reviews exist it's recomputed as their true average and
+  // `ratingCount` switches from 0 to the real review count. See
+  // app/api/series/[id]/reviews/route.ts.
+  rating:{type:Number,default:4.5}, ratingCount:{type:Number,default:0},
+  totalEpisodes:{type:Number,default:0},
   episodes:[EpSchema], tags:[String],
   isFeatured:{type:Boolean,default:false}, isTrending:{type:Boolean,default:false},
   totalPlays:{type:Number,default:0},
