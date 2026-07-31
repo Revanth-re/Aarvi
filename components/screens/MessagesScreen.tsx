@@ -3,7 +3,7 @@ import { Fragment, Suspense, useEffect, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Send, MessageSquare, Smile, Paperclip, X, Loader2, Check, CheckCheck, Reply, Download, Trash2 } from "lucide-react";
 import { Conversation, MessageItem, MessageAttachment } from "@/types";
-import { useApp, useToast } from "@/store";
+import { useApp, useToast, useDataCache, cacheKeyFor } from "@/store";
 import { creatorFetch } from "@/lib/creatorFetch";
 import { timeAgo, clockTime, dayLabel } from "@/lib/gamification";
 import { Screen, EmptyState } from "@/components/kit";
@@ -38,7 +38,15 @@ function MessagesScreenInner() {
   const searchParams = useSearchParams();
   const withId = searchParams.get("with");
 
-  const [convos, setConvos] = useState<Conversation[]>([]);
+  // Seeded from the shared cache so re-opening Messages shows existing
+  // threads immediately instead of "No conversations yet" for a beat
+  // while the fresh fetch is in flight — same flicker pattern fixed
+  // elsewhere (TopBar's coin count, the Home stories rail).
+  const convosKey = cacheKeyFor("conversations", user?._id);
+  const cachedConvos = useDataCache(s => s.cache[convosKey]) as Conversation[] | undefined;
+  const setCache = useDataCache(s => s.setCache);
+  const [fetchedConvos, setFetchedConvos] = useState<Conversation[] | null>(null);
+  const convos = fetchedConvos ?? cachedConvos ?? [];
   const [openWith, setOpenWith] = useState<Conversation["participants"][0] | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [draft, setDraft] = useState("");
@@ -119,7 +127,11 @@ function MessagesScreenInner() {
     let cancelled = false;
     fetch(`/api/messages?userId=${user._id}`)
       .then(r => r.json())
-      .then(d => { if (!cancelled && Array.isArray(d.conversations)) setConvos(d.conversations); })
+      .then(d => {
+        if (cancelled || !Array.isArray(d.conversations)) return;
+        setFetchedConvos(d.conversations);
+        setCache(convosKey, d.conversations);
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [user?._id, reloadKey]);

@@ -1,8 +1,9 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
-import { Plus, Mic, Image as ImageIcon, Quote, X, Send, EyeOff, Eye, Trash2, MoreVertical } from "lucide-react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import Link from "next/link";
+import { Plus, Mic, Image as ImageIcon, Quote, X, Send, EyeOff, Eye, Trash2, MoreVertical, Heart } from "lucide-react";
 import { StoryGroup, StoryKind } from "@/types";
-import { useApp, useToast } from "@/store";
+import { useApp, useToast, useDataCache, cacheKeyFor } from "@/store";
 import { timeAgo, gradientFor } from "@/lib/gamification";
 import { creatorFetch } from "@/lib/creatorFetch";
 import { Sheet } from "@/components/kit";
@@ -21,7 +22,18 @@ export default function StoryRail() {
   const markStorySeen = useApp(s => s.markStorySeen);
   const showToast = useToast(s => s.show);
 
-  const [groups, setGroups] = useState<StoryGroup[]>([]);
+  // StoryRail remounts fresh every time Home does (it's a child of
+  // HomeScreen, not persisted across navigation the way a top-level
+  // route is) — without seeding from the shared cache, the rail would
+  // flash empty every single time Home is revisited, same flicker bug
+  // TopBar's coin count had. Read reactively (not frozen at mount) so
+  // it still works out even if `user` hasn't rehydrated yet.
+  const storiesKey = cacheKeyFor("stories", user?._id);
+  const cachedGroups = useDataCache(s => s.cache[storiesKey]) as StoryGroup[] | undefined;
+  const setCache = useDataCache(s => s.setCache);
+
+  const [fetchedGroups, setFetchedGroups] = useState<StoryGroup[] | null>(null);
+  const groups = fetchedGroups ?? cachedGroups ?? [];
   const [composerOpen, setComposerOpen] = useState(false);
   const [viewing, setViewing] = useState<StoryGroup | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -31,7 +43,11 @@ export default function StoryRail() {
     const qs = user ? `?userId=${user._id}` : "";
     fetch(`/api/stories${qs}`)
       .then(r => r.json())
-      .then(d => { if (!cancelled && Array.isArray(d)) setGroups(d); })
+      .then(d => {
+        if (cancelled || !Array.isArray(d)) return;
+        setFetchedGroups(d);
+        setCache(storiesKey, d);
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [user?._id, reloadKey]);
@@ -290,6 +306,74 @@ function StoryViewer({
   const isFollowing = user ? (user.following || []).includes(group.userId) : false;
   const isRequested = user ? (user.followRequestsSent || []).includes(group.userId) : false;
 
+  // ── Who viewed / who liked (owner only) ──
+  type StatsUser = { _id: string; name: string; handle: string; image: string };
+  const [statsKind, setStatsKind] = useState<"views" | "likes" | null>(null);
+  const [statsUsers, setStatsUsers] = useState<StatsUser[]>([]);
+  const [statsLoading, setStatsLoading] = useState(false);
+
+  const openStats = async (kind: "views" | "likes") => {
+    if (!user || !story) return;
+    setStatsKind(kind);
+    setStatsLoading(true);
+    try {
+      const d = await fetch(`/api/stories/${story._id}/viewers?userId=${user._id}&kind=${kind}`).then(r => r.json());
+      setStatsUsers(Array.isArray(d.users) ? d.users : []);
+    } catch {
+      setStatsUsers([]);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  // Swiping to a different story while the sheet is open would leave
+  // it showing stats for the wrong story.
+  useEffect(() => {
+    queueMicrotask(() => setStatsKind(null));
+  }, [idx]);
+
+  // ── Playback progress (the segmented bar at top) ──
+  // Photo/quote stories auto-advance on a fixed timer; audio stories
+  // instead track the actual <audio> element's playback position, so
+  // the bar reflects real progress rather than a guess at how long the
+  // clip runs. Paused (not advancing) while the menu is open or a
+  // reply is being typed, same as Instagram not burning through your
+  // story while you're mid-message.
+  const PHOTO_QUOTE_MS = 5000;
+  const [progress, setProgress] = useState(0);
+  const pausedRef = useRef(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    pausedRef.current = menuOpen || reply.trim().length > 0 || !!statsKind;
+  }, [menuOpen, reply, statsKind]);
+
+  const goNext = useCallback(() => {
+    setIdx(i => {
+      if (i < localStories.length - 1) return i + 1;
+      onClose();
+      return i;
+    });
+  }, [localStories.length, onClose]);
+
+  useEffect(() => {
+    // Deferred a tick — setting state synchronously in an effect's body
+    // (vs. inside a callback like a timer tick) can trigger a
+    // cascading-render lint error; queueMicrotask sidesteps it cheaply.
+    queueMicrotask(() => setProgress(0));
+    if (story.kind === "audio") return; // driven by the <audio> handlers below instead
+    let elapsed = 0;
+    const iv = setInterval(() => {
+      if (pausedRef.current) return;
+      elapsed += 100;
+      const pct = Math.min(100, (elapsed / PHOTO_QUOTE_MS) * 100);
+      setProgress(pct);
+      if (pct >= 100) { clearInterval(iv); goNext(); }
+    }, 100);
+    return () => clearInterval(iv);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idx, story._id, story.kind]);
+
   // Instagram rule: replying to a story requires following its owner —
   // viewing doesn't (the home rail is already follow-scoped), but the
   // swipe-up reply itself is gated. See POST /api/messages for the
@@ -353,6 +437,29 @@ function StoryViewer({
     }
   };
 
+  // Optimistic — flips instantly, then reconciles with (or reverts to
+  // match) whatever the server actually recorded.
+  const toggleLike = async () => {
+    if (!user) { showToast("Log in to like stories", "info"); return; }
+    if (!story) return;
+    const wasLiked = story.liked;
+    const wasCount = story.likeCount;
+    setLocalStories(prev => prev.map((s, i) => i === idx ? { ...s, liked: !wasLiked, likeCount: wasCount + (wasLiked ? -1 : 1) } : s));
+    try {
+      const r = await fetch(`/api/stories/${story._id}/like`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user._id }),
+      });
+      const d = await r.json();
+      if (!r.ok || d.error) throw new Error(d.error || "Couldn't like");
+      setLocalStories(prev => prev.map((s, i) => i === idx ? { ...s, liked: d.liked, likeCount: d.likeCount } : s));
+    } catch {
+      setLocalStories(prev => prev.map((s, i) => i === idx ? { ...s, liked: wasLiked, likeCount: wasCount } : s));
+      showToast("Couldn't like", "error");
+    }
+  };
+
   const sendReply = async () => {
     if (!user) { showToast("Log in to reply to stories", "info"); return; }
     const text = reply.trim();
@@ -401,10 +508,13 @@ function StoryViewer({
     }} className="anim-in">
       <div style={{ display: "flex", gap: 4, padding: "10px 12px 6px" }}>
         {localStories.map((_, i) => (
-          <span key={i} style={{
-            flex: 1, height: 3, borderRadius: 99,
-            background: i <= idx ? "#fff" : "rgba(255,255,255,.3)",
-          }}/>
+          <span key={i} style={{ flex: 1, height: 3, borderRadius: 99, background: "rgba(255,255,255,.3)", overflow: "hidden" }}>
+            <span style={{
+              display: "block", height: "100%", borderRadius: 99, background: "#fff",
+              width: i < idx ? "100%" : i === idx ? `${progress}%` : "0%",
+              transition: i === idx ? "width .1s linear" : "none",
+            }}/>
+          </span>
         ))}
       </div>
 
@@ -414,7 +524,28 @@ function StoryViewer({
           <div className="truncate" style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>
             {group.name}{story.hidden && isOwn && <span style={{ fontWeight: 500, color: "rgba(255,255,255,.6)" }}> · Hidden</span>}
           </div>
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,.6)" }}>{timeAgo(story.createdAt)} ago</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 11, color: "rgba(255,255,255,.6)" }}>
+            <span>{timeAgo(story.createdAt)} ago</span>
+            {/* View/like counts are only shown to the story's own
+                owner — same as Instagram, where other viewers can react
+                but don't see the aggregate stats. */}
+            {isOwn && (
+              <>
+                <button onClick={() => openStats("views")} style={{
+                  display: "flex", alignItems: "center", gap: 3, background: "none", border: "none",
+                  cursor: "pointer", color: "rgba(255,255,255,.65)", fontSize: 11, padding: 0,
+                }}>
+                  <Eye size={11}/>{story.viewCount}
+                </button>
+                <button onClick={() => openStats("likes")} style={{
+                  display: "flex", alignItems: "center", gap: 3, background: "none", border: "none",
+                  cursor: "pointer", color: "rgba(255,255,255,.65)", fontSize: 11, padding: 0,
+                }}>
+                  <Heart size={11}/>{story.likeCount}
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         {isOwn && (
@@ -453,7 +584,15 @@ function StoryViewer({
       </div>
 
       <div
-        onClick={() => { if (menuOpen) { setMenuOpen(false); return; } idx < localStories.length - 1 ? setIdx(idx + 1) : onClose(); }}
+        onClick={(e) => {
+          if (menuOpen) { setMenuOpen(false); return; }
+          // Left third goes back a story, same tap-zone convention as
+          // Instagram/WhatsApp Status; anywhere else advances forward.
+          const rect = e.currentTarget.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          if (x < rect.width * 0.3) { if (idx > 0) setIdx(idx - 1); }
+          else goNext();
+        }}
         style={{ position: "relative", flex: 1, overflow: "hidden", cursor: "pointer" }}>
 
         {/* Full-bleed backdrop, same idea as WhatsApp Status / Instagram
@@ -493,8 +632,13 @@ function StoryViewer({
           )}
 
           {story.kind === "audio" && story.mediaUrl && (
-            <audio src={story.mediaUrl} controls autoPlay style={{ width: "100%", maxWidth: 320 }}
-              onClick={e => e.stopPropagation()}/>
+            <audio ref={audioRef} src={story.mediaUrl} controls autoPlay style={{ width: "100%", maxWidth: 320 }}
+              onClick={e => e.stopPropagation()}
+              onTimeUpdate={() => {
+                const a = audioRef.current;
+                if (a && a.duration) setProgress((a.currentTime / a.duration) * 100);
+              }}
+              onEnded={goNext}/>
           )}
 
           {story.caption && (
@@ -518,9 +662,18 @@ function StoryViewer({
         <div
           onClick={e => e.stopPropagation()}
           style={{
-            display: "flex", gap: 8, padding: "10px 14px",
+            display: "flex", gap: 8, padding: "10px 14px", alignItems: "center",
             marginBottom: "env(safe-area-inset-bottom, 10px)",
           }}>
+          {/* Liking doesn't require following — same as viewing, it's a
+              lighter action than replying (which does). */}
+          <button onClick={toggleLike} aria-label={story.liked ? "Unlike" : "Like"}
+            style={{
+              background: "none", border: "none", cursor: "pointer", display: "flex", flex: "none",
+              color: story.liked ? "#FF4D6D" : "#fff",
+            }}>
+            <Heart size={22} fill={story.liked ? "#FF4D6D" : "none"}/>
+          </button>
           {isFollowing ? (
             <>
               <input
@@ -559,6 +712,54 @@ function StoryViewer({
               {following ? "Following…" : `Follow ${group.name.split(" ")[0]} to reply`}
             </button>
           )}
+        </div>
+      )}
+
+      {/* Who viewed / who liked — owner only, same privacy Instagram
+          gives story stats. A bottom sheet over the viewer itself
+          (higher z-index) rather than a separate route, so it's a
+          quick glance, not a navigation. */}
+      {statsKind && (
+        <div
+          onClick={() => setStatsKind(null)}
+          style={{ position: "fixed", inset: 0, zIndex: 600, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: "100%", maxWidth: 480, maxHeight: "65vh", background: "#1B1720",
+              borderRadius: "20px 20px 0 0", padding: "18px 16px calc(18px + env(safe-area-inset-bottom,0px))",
+              display: "flex", flexDirection: "column",
+            }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flex: "none" }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>
+                {statsKind === "views" ? "Viewed by" : "Liked by"}
+              </span>
+              <button onClick={() => setStatsKind(null)} aria-label="Close"
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#fff", display: "flex" }}>
+                <X size={18}/>
+              </button>
+            </div>
+            <div style={{ overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }}>
+              {statsLoading ? (
+                <div style={{ padding: "20px 0", textAlign: "center", fontSize: 12, color: "rgba(255,255,255,.5)" }}>Loading…</div>
+              ) : statsUsers.length ? (
+                statsUsers.map(u => (
+                  <Link key={u._id} href={`/u/${u._id}`}
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 4px", textDecoration: "none" }}>
+                    <Avatar name={u.name} image={u.image} size={34}/>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="truncate" style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{u.name}</div>
+                      <div className="truncate" style={{ fontSize: 11.5, color: "rgba(255,255,255,.55)" }}>{u.handle}</div>
+                    </div>
+                  </Link>
+                ))
+              ) : (
+                <div style={{ padding: "20px 0", textAlign: "center", fontSize: 12, color: "rgba(255,255,255,.5)" }}>
+                  {statsKind === "views" ? "No views yet" : "No likes yet"}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

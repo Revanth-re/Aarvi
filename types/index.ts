@@ -152,6 +152,9 @@ export interface Story {
   caption: string; mediaUrl?: string;
   createdAt: string; expiresAt: string;
   viewCount: number;
+  likeCount: number;
+  /** Whether the requesting user has liked this story. */
+  liked: boolean;
   /** "Only me" — hidden from everyone but the owner. */
   hidden: boolean;
 }

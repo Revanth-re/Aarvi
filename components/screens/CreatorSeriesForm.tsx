@@ -79,8 +79,17 @@ export default function CreatorSeriesForm({ initial }: Props) {
     if (!form.title.trim()) { setErr("Title is required."); return; }
     if (!form.description.trim()) { setErr("Description is required."); return; }
     if (!episodes.length) { setErr("Add at least one episode."); return; }
-    if (episodes.some(e => !e.title?.trim() || !e.audioUrl)) {
-      setErr("Every episode needs a title and an uploaded audio file.");
+    // Named by episode number rather than one generic message — a
+    // vague "every episode needs..." error is indistinguishable from
+    // a genuinely broken save when it's actually just one specific
+    // episode (often an older one, not the one you were just working
+    // on) missing something.
+    const incomplete = episodes
+      .map((e, i) => ({ e, n: i + 1 }))
+      .filter(({ e }) => !e.title?.trim() || !e.audioUrl);
+    if (incomplete.length) {
+      const which = incomplete.map(({ e, n }) => e.title?.trim() || `Episode ${n}`).join(", ");
+      setErr(`Needs a title and uploaded audio before saving: ${which}.`);
       return;
     }
 
@@ -96,7 +105,18 @@ export default function CreatorSeriesForm({ initial }: Props) {
       const r = await creatorFetch(url, {
         method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
       });
-      const d = await r.json();
+      let d: { _id?: string; error?: string };
+      try {
+        d = await r.json();
+      } catch {
+        // The response wasn't JSON at all — a proxy/host-level error
+        // page (timeout, gateway error) rather than anything the API
+        // route itself returned. Surfacing the HTTP status at least
+        // says *something* useful instead of a raw parse-error string.
+        setErr(`Save failed (server returned status ${r.status}, not a valid response). Try again in a moment.`);
+        setSaving(false);
+        return;
+      }
       if (!r.ok || d.error) { setErr(d.error || "Something went wrong."); setSaving(false); return; }
 
       showToast(isEdit ? "Series updated" : "Series published", "success");

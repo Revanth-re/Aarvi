@@ -24,8 +24,20 @@ export default function TopBar({
   const cachedUnread = useDataCache(s => s.cache[unreadKey]) as number | undefined;
   const setCache = useDataCache(s => s.setCache);
 
-  const [coins, setCoins] = useState(cachedCoins ?? 0);
-  const [unread, setUnread] = useState(cachedUnread ?? 0);
+  // Freezing these in a useState initializer (the old approach) only
+  // reads the cache once, at the moment this exact component instance
+  // first mounts — if `user` hasn't rehydrated from localStorage yet at
+  // that instant, coinsKey resolves to the "guest" cache slot (always
+  // empty) and the count is stuck showing 0 until the fetch below
+  // finishes, even though the real cached number was sitting right
+  // there a beat later. Reading straight from the cache on every
+  // render instead means the moment `user` (and so the real key)
+  // becomes available, the correct cached number appears immediately —
+  // no waiting on a fresh network round-trip just to stop showing 0.
+  const [fetchedCoins, setFetchedCoins] = useState<number | null>(null);
+  const [fetchedUnread, setFetchedUnread] = useState<number | null>(null);
+  const coins = fetchedCoins ?? cachedCoins ?? 0;
+  const unread = fetchedUnread ?? cachedUnread ?? 0;
 
   useEffect(() => {
     if (!user) return;
@@ -35,7 +47,7 @@ export default function TopBar({
       .then(r => r.json())
       .then(d => {
         if (cancelled || typeof d.coins !== "number") return;
-        setCoins(d.coins);
+        setFetchedCoins(d.coins);
         setCache(coinsKey, d.coins);
       })
       .catch(() => {});
@@ -44,7 +56,7 @@ export default function TopBar({
       .then(r => r.json())
       .then(d => {
         if (cancelled || typeof d.unread !== "number") return;
-        setUnread(d.unread);
+        setFetchedUnread(d.unread);
         setCache(unreadKey, d.unread);
       })
       .catch(() => {});

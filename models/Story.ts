@@ -18,6 +18,9 @@ const StorySchema = new Schema({
   /** userIds who have opened it — length is the view count. */
   viewedBy: [{ type: String }],
 
+  /** userIds who have liked it — length is the like count. */
+  likedBy: [{ type: String }],
+
   /** Instagram-style "only me" — excluded from everyone else's rail,
    *  but the owner still sees (and can un-hide) it on their own. */
   hidden: { type: Boolean, default: false },
