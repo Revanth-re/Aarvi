@@ -1,22 +1,62 @@
-// SWARA FM service worker — currently only handles Web Push. It
-// intentionally does NOT cache pages/assets or intercept fetch(): this
-// isn't an offline-mode service worker, just the minimum needed for
-// push notifications and PWA installability to work at all (Chrome
-// requires an active service worker for beforeinstallprompt to fire).
+// SWARA FM service worker — handles Web Push AND gives the app real
+// (if modest) offline behavior: navigations fall back to a friendly
+// offline page instead of the browser's default error, and the icons
+// PWABuilder/Android look for are pre-cached so installability checks
+// pass. Deliberately does NOT cache API responses, uploaded media, or
+// hashed Next.js build assets — those are either auth-sensitive,
+// large, or must always come from the network to avoid stale bundles
+// after a deploy.
 
-self.addEventListener("install", () => {
+const CACHE = "swara-shell-v1";
+const SHELL_ASSETS = [
+  "/offline.html",
+  "/icon-192.png",
+  "/icon-512.png",
+];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE)
+      .then((cache) => cache.addAll(SHELL_ASSETS))
+      .catch(() => {}) // best-effort — a failed precache shouldn't block install
+  );
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
 });
 
-// A passthrough fetch handler — some browsers only count a PWA as
-// "installable" once a service worker actually controls fetches, even
-// if (like here) it does nothing but hand every request straight to
-// the network. No caching/offline behavior is implemented on purpose.
-self.addEventListener("fetch", () => {});
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+  if (request.method !== "GET") return; // never intercept mutations
+
+  // Page navigations: go to the network first (always want fresh
+  // content/auth state); only fall back to the cached offline page if
+  // that fails, i.e. no connection at all.
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request).catch(() => caches.match("/offline.html"))
+    );
+    return;
+  }
+
+  // The app's own icons: cache-first, since they never change without
+  // a new filename/version.
+  const url = new URL(request.url);
+  if (url.origin === self.location.origin && SHELL_ASSETS.includes(url.pathname)) {
+    event.respondWith(
+      caches.match(request).then((cached) => cached || fetch(request))
+    );
+  }
+
+  // Everything else (API calls, audio, uploaded images, JS/CSS
+  // bundles) is intentionally left to the network, untouched.
+});
 
 // The server (lib/push.ts) sends a JSON payload: { title, body, url }.
 self.addEventListener("push", (event) => {

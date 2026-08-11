@@ -11,5 +11,17 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "50mb",
     },
   },
+  // The service worker file must never be cached by the CDN/browser —
+  // otherwise a new sw.js after a deploy never reaches installed
+  // clients, and they stay stuck running old offline/push logic
+  // indefinitely.
+  async headers() {
+    return [
+      {
+        source: "/sw.js",
+        headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
+      },
+    ];
+  },
 };
 export default nextConfig;

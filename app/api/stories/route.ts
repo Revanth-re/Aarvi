@@ -2,46 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { StoryModel } from "@/models/Story";
 import { UserModel } from "@/models/User";
-import { NotificationModel } from "@/models/Notification";
-import { sendPushToUser } from "@/lib/push";
 import { publicUser, idOf, iso } from "@/lib/serialize";
 import { StoryGroup } from "@/types";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-
-// Same idea as notifyFollowersOfNewSeries in app/api/series/route.ts —
-// tells everyone who follows this account that they just posted,
-// in-app always and via push if enabled on that device. A hidden
-// ("only me") story never triggers this — nobody but the owner is
-// supposed to know it exists.
-async function notifyFollowersOfNewStory(authorId: string) {
-  try {
-    const [author, followers] = await Promise.all([
-      UserModel.findById(authorId).select("name").lean<any>(),
-      UserModel.find({ following: authorId }).select("_id settings").lean<any[]>(),
-    ]);
-    if (!followers.length) return;
-
-    const authorName = author?.name || "Someone you follow";
-    await NotificationModel.insertMany(followers.map(f => ({
-      userId: idOf(f._id),
-      category: "social",
-      type: "new_story",
-      title: `${authorName} posted a new story`,
-      link: "/",
-      fromUserId: authorId,
-      fromUserName: authorName,
-    })));
-
-    await Promise.all(followers.map(f =>
-      f.settings?.notif?.newMessages !== false
-        ? sendPushToUser(idOf(f._id), { title: authorName, body: "Posted a new story", url: "/" })
-        : Promise.resolve()
-    ));
-  } catch {
-    // Best-effort — never worth failing the story post over.
-  }
-}
 
 // GET /api/stories?userId=<me>
 //
@@ -97,8 +61,6 @@ export async function GET(req: NextRequest) {
         caption: s.caption || "", mediaUrl: s.mediaUrl || "",
         createdAt: iso(s.createdAt), expiresAt: iso(s.expiresAt),
         viewCount: (s.viewedBy || []).length,
-        likeCount: (s.likedBy || []).length,
-        liked: !!me && (s.likedBy || []).includes(me),
         hidden: !!s.hidden,
       });
     }
@@ -144,13 +106,6 @@ export async function POST(req: NextRequest) {
       mediaUrl,
       hidden: !!hidden,
     });
-
-    // Awaited for the same reason as the messages/series notify calls —
-    // a serverless function can be torn down right after the response
-    // is sent, which would kill a detached async call before it finishes.
-    if (!doc.hidden) {
-      await notifyFollowersOfNewStory(userId);
-    }
 
     return NextResponse.json({ _id: idOf(doc._id), ok: true, hidden: doc.hidden }, { status: 201 });
   } catch (e) {

@@ -44,7 +44,7 @@ export default function BottomNav() {
 
   return (
     <nav className="bottom-nav" data-style={tabBarStyle}>
-      <div style={{ height: "var(--nav-h)", display: "flex", alignItems: "center" }}>
+      <div className="bottom-nav-inner">
         {TABS.map(({ href, label, Icon }) => {
           const on = active(href);
           const badge = href === "/messages" ? unreadDms : 0;
@@ -63,7 +63,7 @@ export default function BottomNav() {
                   </span>
                 )}
               </span>
-              <span style={{ fontSize: 10, fontWeight: on ? 700 : 500 }}>{label}</span>
+              <span className="nav-label" style={{ fontWeight: on ? 700 : 500 }}>{label}</span>
             </Link>
           );
         })}

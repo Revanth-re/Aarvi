@@ -57,8 +57,6 @@ export interface Episode {
 export interface Series extends Partial<BaseEntity> {
   _id: string; title: string; description: string; coverImage: string;
   genre: string; language: string; narrator: string; rating: number;
-  /** Real review count backing `rating` — 0 means it's still the seeded placeholder. */
-  ratingCount?: number;
   totalEpisodes: number; episodes: Episode[]; tags: string[];
   isFeatured: boolean; isTrending: boolean; totalPlays: number; createdAt: string;
   /** Creator account that owns this series, if any. */
@@ -152,9 +150,6 @@ export interface Story {
   caption: string; mediaUrl?: string;
   createdAt: string; expiresAt: string;
   viewCount: number;
-  likeCount: number;
-  /** Whether the requesting user has liked this story. */
-  liked: boolean;
   /** "Only me" — hidden from everyone but the owner. */
   hidden: boolean;
 }
@@ -179,18 +174,6 @@ export interface Thought {
   text: string;
   likeCount: number; liked: boolean; replyCount: number;
   parentId?: string | null;
-  createdAt: string;
-}
-
-// ══════════════════════════════════════════════════════════
-// Reviews — one star rating + optional written review per (series, user)
-// ══════════════════════════════════════════════════════════
-export interface Review {
-  _id: string;
-  seriesId: string;
-  userId: string; userName: string; userHandle: string; userImage: string;
-  stars: number;
-  text: string;
   createdAt: string;
 }
 
@@ -259,11 +242,6 @@ export interface StoryRef {
 export interface MessageAttachment {
   url: string; kind: "image" | "video";
 }
-/** A small snapshot of the message being replied to — quoted above the reply, same idea as Instagram/WhatsApp. */
-export interface MessageReplyTo {
-  messageId: string; senderId: string; text: string;
-  attachmentKind?: "image" | "video";
-}
 export interface MessageItem {
   _id: string; conversationId: string; senderId: string;
   text: string; createdAt: string; read: boolean;
@@ -271,8 +249,6 @@ export interface MessageItem {
   storyRef?: StoryRef;
   /** Present when the message carries an image/video/GIF instead of (or alongside) text. */
   attachment?: MessageAttachment;
-  /** Present when this message is a reply to another message in the thread. */
-  replyTo?: MessageReplyTo;
 }
 export interface Conversation {
   _id: string;

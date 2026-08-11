@@ -79,17 +79,8 @@ export default function CreatorSeriesForm({ initial }: Props) {
     if (!form.title.trim()) { setErr("Title is required."); return; }
     if (!form.description.trim()) { setErr("Description is required."); return; }
     if (!episodes.length) { setErr("Add at least one episode."); return; }
-    // Named by episode number rather than one generic message — a
-    // vague "every episode needs..." error is indistinguishable from
-    // a genuinely broken save when it's actually just one specific
-    // episode (often an older one, not the one you were just working
-    // on) missing something.
-    const incomplete = episodes
-      .map((e, i) => ({ e, n: i + 1 }))
-      .filter(({ e }) => !e.title?.trim() || !e.audioUrl);
-    if (incomplete.length) {
-      const which = incomplete.map(({ e, n }) => e.title?.trim() || `Episode ${n}`).join(", ");
-      setErr(`Needs a title and uploaded audio before saving: ${which}.`);
+    if (episodes.some(e => !e.title?.trim() || !e.audioUrl)) {
+      setErr("Every episode needs a title and an uploaded audio file.");
       return;
     }
 
@@ -105,18 +96,7 @@ export default function CreatorSeriesForm({ initial }: Props) {
       const r = await creatorFetch(url, {
         method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
       });
-      let d: { _id?: string; error?: string };
-      try {
-        d = await r.json();
-      } catch {
-        // The response wasn't JSON at all — a proxy/host-level error
-        // page (timeout, gateway error) rather than anything the API
-        // route itself returned. Surfacing the HTTP status at least
-        // says *something* useful instead of a raw parse-error string.
-        setErr(`Save failed (server returned status ${r.status}, not a valid response). Try again in a moment.`);
-        setSaving(false);
-        return;
-      }
+      const d = await r.json();
       if (!r.ok || d.error) { setErr(d.error || "Something went wrong."); setSaving(false); return; }
 
       showToast(isEdit ? "Series updated" : "Series published", "success");
@@ -208,15 +188,6 @@ export default function CreatorSeriesForm({ initial }: Props) {
                   <span className="truncate" style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
                     {ep.title || `Episode ${i + 1}`}
                   </span>
-                  {ep.isLocked && (
-                    <span style={{
-                      fontSize: 10, fontWeight: 700, color: "var(--coin)", flex: "none",
-                      background: "color-mix(in srgb, var(--coin) 14%, transparent)",
-                      borderRadius: 999, padding: "2px 8px",
-                    }}>
-                      Paid
-                    </span>
-                  )}
                   <button onClick={e => { e.stopPropagation(); delEp(i); }} style={{
                     background: "none", border: "none", cursor: "pointer", color: "var(--danger)", padding: 4,
                   }}>
@@ -241,23 +212,6 @@ export default function CreatorSeriesForm({ initial }: Props) {
                         Duration: {Math.floor((ep.duration || 0) / 60)}:{String((ep.duration || 0) % 60).padStart(2, "0")}
                       </div>
                     )}
-                    <Field label="Access">
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button type="button" onClick={() => setEp(i, "isLocked", false)}
-                          className={`btn btn-xs ${!ep.isLocked ? "btn-primary" : "btn-soft"}`} style={{ flex: 1, justifyContent: "center" }}>
-                          Free
-                        </button>
-                        <button type="button" onClick={() => setEp(i, "isLocked", true)}
-                          className={`btn btn-xs ${ep.isLocked ? "btn-primary" : "btn-soft"}`} style={{ flex: 1, justifyContent: "center" }}>
-                          Paid
-                        </button>
-                      </div>
-                      <p style={{ fontSize: 11, color: "var(--text3)", margin: "6px 0 0" }}>
-                        {ep.isLocked
-                          ? "Locked — listeners unlock it by spending coins or watching an ad."
-                          : "Anyone can listen without unlocking."}
-                      </p>
-                    </Field>
                   </div>
                 )}
               </div>

@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
       const convo = await ConversationModel.findOne({ key: conversationKey(me, withId) }).lean<any>();
       if (!convo) return NextResponse.json({ messages: [] });
 
-      const rows = await MessageModel.find({ conversationId: idOf(convo._id), deleted: { $ne: true } })
+      const rows = await MessageModel.find({ conversationId: idOf(convo._id) })
         .sort({ createdAt: 1 }).limit(200).lean<any[]>();
 
       // Opening a thread marks the other side's messages as read.
@@ -40,7 +40,6 @@ export async function GET(req: NextRequest) {
           read: (m.readBy || []).includes(me),
           ...(m.storyRef ? { storyRef: m.storyRef } : {}),
           ...(m.attachment ? { attachment: m.attachment } : {}),
-          ...(m.replyTo ? { replyTo: m.replyTo } : {}),
         })),
       });
     }
@@ -57,10 +56,10 @@ export async function GET(req: NextRequest) {
     const conversations = await Promise.all(convos.map(async (c) => {
       const otherId = (c.participants || []).find((x: string) => x !== me);
       const other = byId.get(otherId);
-      const last = await MessageModel.findOne({ conversationId: idOf(c._id), deleted: { $ne: true } })
+      const last = await MessageModel.findOne({ conversationId: idOf(c._id) })
         .sort({ createdAt: -1 }).lean<any>();
       const unread = await MessageModel.countDocuments({
-        conversationId: idOf(c._id), senderId: { $ne: me }, readBy: { $ne: me }, deleted: { $ne: true },
+        conversationId: idOf(c._id), senderId: { $ne: me }, readBy: { $ne: me },
       });
 
       return {
@@ -82,18 +81,15 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/messages — { userId, toId, text, storyRef?, attachment?, replyToId? }
+// POST /api/messages — { userId, toId, text, storyRef?, attachment? }
 // storyRef: { storyId, kind, mediaUrl, caption } — set when this
 // message is a reply to a story rather than a normal DM.
 // attachment: { url, kind: "image" | "video" } — an image/GIF/video
 // sent from the thread's attach button, with or without caption text.
-// replyToId: the _id of another message in the same thread being
-// quote-replied to (Instagram/WhatsApp style) — resolved server-side
-// into a snapshot rather than trusting a client-supplied preview.
 export async function POST(req: NextRequest) {
   try {
     await connectDB();
-    const { userId, toId, text, storyRef, attachment, replyToId } = await req.json();
+    const { userId, toId, text, storyRef, attachment } = await req.json();
 
     if (!userId || !toId) return NextResponse.json({ error: "userId and toId are required" }, { status: 400 });
     if (userId === toId) return NextResponse.json({ error: "You can't message yourself" }, { status: 400 });
@@ -141,25 +137,6 @@ export async function POST(req: NextRequest) {
     // doesn't need one — the thread list falls back to "Photo"/"Video".
     const fallbackText = !body && storyRef ? "Replied to your story" : body;
 
-    // Resolve the quoted message server-side (only within this same
-    // conversation, and only if it's still there) rather than trusting
-    // whatever preview text the client sends — keeps the quote honest
-    // even if the client's local copy is stale.
-    let replyTo: { messageId: string; senderId: string; text: string; attachmentKind?: "image" | "video" } | undefined;
-    if (replyToId) {
-      const target = await MessageModel.findOne({
-        _id: replyToId, conversationId: idOf(convo._id), deleted: { $ne: true },
-      }).lean<any>();
-      if (target) {
-        replyTo = {
-          messageId: idOf(target._id),
-          senderId: target.senderId,
-          text: target.text || "",
-          ...(target.attachment?.kind ? { attachmentKind: target.attachment.kind } : {}),
-        };
-      }
-    }
-
     const msg = await MessageModel.create({
       conversationId: idOf(convo._id),
       senderId: userId,
@@ -176,7 +153,6 @@ export async function POST(req: NextRequest) {
       ...(attachment?.url ? {
         attachment: { url: String(attachment.url), kind: attachment.kind === "video" ? "video" : "image" },
       } : {}),
-      ...(replyTo ? { replyTo } : {}),
     });
 
     // Sender's name is needed for both the in-app bell and the push
@@ -220,7 +196,6 @@ export async function POST(req: NextRequest) {
         senderId: userId, text: msg.text, createdAt: iso(msg.createdAt), read: true,
         ...(msg.storyRef ? { storyRef: msg.storyRef } : {}),
         ...(msg.attachment ? { attachment: msg.attachment } : {}),
-        ...(msg.replyTo ? { replyTo: msg.replyTo } : {}),
       },
     }, { status: 201 });
   } catch (e) {

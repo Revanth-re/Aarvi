@@ -1,10 +1,11 @@
 "use client";
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Palette, Bell, Headphones, Timer, Download, Shield, Sun, Moon, Monitor, Layers, LogOut, UserX } from "lucide-react";
+import Link from "next/link";
+import { Palette, Bell, Headphones, Timer, Download, Shield, Sun, Moon, Monitor, Layers, LogOut, UserX, FileText, ChevronRight } from "lucide-react";
 import { ThemeMode, TabBarStyle, UserSettings } from "@/types";
 import { useApp, useDataCache, useToast } from "@/store";
-import { pushSupported, enablePush, disablePush, isIOS, isStandalone } from "@/lib/push-client";
+import { pushSupported, enablePush, disablePush } from "@/lib/push-client";
 import { Screen } from "@/components/kit";
 import TopBar from "@/components/shell/TopBar";
 
@@ -35,25 +36,12 @@ export default function SettingsScreen() {
   // navigator/window during the server render would mismatch hydration.
   const [canPush, setCanPush] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
-  // Whether THIS device actually has a live browser push subscription —
-  // separate from settings.notif.newMessages (which is just a DB flag
-  // that defaults to true and used to drive the toggle directly). That
-  // made the switch show "on" for everyone even though nobody had ever
-  // granted permission or registered a subscription, so lockscreen
-  // pushes silently never fired for anyone. The toggle now reflects
-  // reality: off until this device has actually subscribed.
-  const [pushOn, setPushOn] = useState(false);
   useEffect(() => {
     const supported = pushSupported();
     // Deferred a tick — setting state synchronously inside an effect's
     // body (vs. inside a callback like a .then()) can trigger a
     // cascading-render lint error; queueMicrotask sidesteps it cheaply.
     queueMicrotask(() => setCanPush(supported));
-    if (!supported) return;
-    navigator.serviceWorker.getRegistration()
-      .then(reg => reg?.pushManager.getSubscription())
-      .then(sub => queueMicrotask(() => setPushOn(!!sub)))
-      .catch(() => {});
   }, []);
 
   const togglePush = async (v: boolean) => {
@@ -76,7 +64,6 @@ export default function SettingsScreen() {
         await disablePush(user._id);
         showToast("Message notifications off", "info");
       }
-      setPushOn(v);
       setGroup("notif", { newMessages: v });
     } finally {
       setPushBusy(false);
@@ -174,20 +161,8 @@ export default function SettingsScreen() {
 
         {/* ── Notifications ── */}
         <Group icon={<Bell size={15}/>} title="Notifications" sub="What we ping you about">
-          {user && (
-            canPush ? (
-              <Toggle label="Push messages & follows to this device" on={pushOn} set={togglePush} disabled={pushBusy}/>
-            ) : (
-              // Silently hiding this row when unsupported used to look
-              // like the feature just wasn't there — showing why is
-              // more useful, especially since the iOS case has an
-              // actual fix (add to home screen) rather than a dead end.
-              <div style={{ padding: "10px 14px 12px", fontSize: 11.5, color: "var(--text3)", lineHeight: 1.5 }}>
-                {isIOS() && !isStandalone()
-                  ? "Add SWARA FM to your Home Screen first (Profile → Download the app), then open it from there to turn on notifications — iOS doesn't allow push from a regular Safari tab."
-                  : "Notifications aren't available in this browser. Try opening SWARA FM in Chrome, or add it to your home screen first."}
-              </div>
-            )
+          {canPush && user && (
+            <Toggle label="Push new messages to this device" on={settings.notif.newMessages} set={togglePush} disabled={pushBusy}/>
           )}
           <Toggle label="New episode drops" on={settings.notif.episodeDrops} set={v => setGroup("notif", { episodeDrops: v })}/>
           <Toggle label="Creator stories & messages" on={settings.notif.creatorStories} set={v => setGroup("notif", { creatorStories: v })}/>
@@ -251,6 +226,17 @@ export default function SettingsScreen() {
             </button>
           </Group>
         )}
+
+        {/* ── Legal ── */}
+        <Group icon={<FileText size={15}/>} title="Legal" sub="Policies and terms">
+          <Link href="/privacy" style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "11px 0", textDecoration: "none", color: "var(--text)", fontSize: 13.5,
+          }}>
+            Privacy Policy
+            <ChevronRight size={16} color="var(--text3)"/>
+          </Link>
+        </Group>
 
         <p style={{ textAlign: "center", fontSize: 11.5, color: "var(--text3)" }}>SWARA FM · v1.0.0</p>
       </Screen>

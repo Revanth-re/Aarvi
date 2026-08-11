@@ -1,9 +1,9 @@
 "use client";
 import { Fragment, Suspense, useEffect, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, Send, MessageSquare, Smile, Paperclip, X, Loader2, Check, CheckCheck, Reply, Download, Trash2 } from "lucide-react";
+import { ArrowLeft, Send, MessageSquare, Smile, Paperclip, X, Loader2, Check, CheckCheck } from "lucide-react";
 import { Conversation, MessageItem, MessageAttachment } from "@/types";
-import { useApp, useToast, useDataCache, cacheKeyFor } from "@/store";
+import { useApp, useToast } from "@/store";
 import { creatorFetch } from "@/lib/creatorFetch";
 import { timeAgo, clockTime, dayLabel } from "@/lib/gamification";
 import { Screen, EmptyState } from "@/components/kit";
@@ -38,15 +38,7 @@ function MessagesScreenInner() {
   const searchParams = useSearchParams();
   const withId = searchParams.get("with");
 
-  // Seeded from the shared cache so re-opening Messages shows existing
-  // threads immediately instead of "No conversations yet" for a beat
-  // while the fresh fetch is in flight — same flicker pattern fixed
-  // elsewhere (TopBar's coin count, the Home stories rail).
-  const convosKey = cacheKeyFor("conversations", user?._id);
-  const cachedConvos = useDataCache(s => s.cache[convosKey]) as Conversation[] | undefined;
-  const setCache = useDataCache(s => s.setCache);
-  const [fetchedConvos, setFetchedConvos] = useState<Conversation[] | null>(null);
-  const convos = fetchedConvos ?? cachedConvos ?? [];
+  const [convos, setConvos] = useState<Conversation[]>([]);
   const [openWith, setOpenWith] = useState<Conversation["participants"][0] | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [draft, setDraft] = useState("");
@@ -57,81 +49,15 @@ function MessagesScreenInner() {
   const [showEmoji, setShowEmoji] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState<MessageAttachment | null>(null);
-  // The message being quote-replied to, shown as a preview above the
-  // input until sent or cancelled — same idea as Instagram/WhatsApp.
-  const [replyingTo, setReplyingTo] = useState<MessageItem | null>(null);
-  // Which message's long-press action row (Reply/Download/Delete) is
-  // currently open — only one at a time.
-  const [menuFor, setMenuFor] = useState<string | null>(null);
-  // Fullscreen tap-to-view for image/video attachments.
-  const [viewer, setViewer] = useState<{ url: string; kind: "image" | "video"; messageId: string; mine: boolean } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const startPress = (id: string) => {
-    pressTimer.current = setTimeout(() => setMenuFor(id), 450);
-  };
-  const cancelPress = () => {
-    if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; }
-  };
-
-  const openReply = (m: MessageItem) => {
-    setReplyingTo(m);
-    setMenuFor(null);
-  };
-
-  const deleteMessage = async (m: MessageItem) => {
-    if (!user) return;
-    setMenuFor(null);
-    if (!window.confirm("Delete this message for everyone?")) return;
-    try {
-      const r = await fetch(`/api/messages/${m._id}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user._id }),
-      });
-      const d = await r.json();
-      if (!r.ok || d.error) { showToast(d.error || "Couldn't delete", "error"); return; }
-      setMessages(prev => prev.filter(x => x._id !== m._id));
-      setReloadKey(k => k + 1);
-      if (viewer?.messageId === m._id) setViewer(null);
-    } catch {
-      showToast("Network error", "error");
-    }
-  };
-
-  // Fetched as a blob rather than a plain <a download> — attachment
-  // URLs are cross-origin (Cloudinary), and browsers largely ignore
-  // the download attribute on cross-origin links, just navigating to
-  // the file instead of saving it.
-  const downloadAttachment = async (url: string, kind: "image" | "video") => {
-    try {
-      const res = await fetch(url);
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = `swara-${Date.now()}.${kind === "video" ? "mp4" : "jpg"}`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(blobUrl);
-    } catch {
-      showToast("Couldn't download", "error");
-    }
-  };
 
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
     fetch(`/api/messages?userId=${user._id}`)
       .then(r => r.json())
-      .then(d => {
-        if (cancelled || !Array.isArray(d.conversations)) return;
-        setFetchedConvos(d.conversations);
-        setCache(convosKey, d.conversations);
-      })
+      .then(d => { if (!cancelled && Array.isArray(d.conversations)) setConvos(d.conversations); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [user?._id, reloadKey]);
@@ -182,7 +108,6 @@ function MessagesScreenInner() {
         body: JSON.stringify({
           userId: user._id, toId: openWith._id, text,
           ...(pendingAttachment ? { attachment: pendingAttachment } : {}),
-          ...(replyingTo ? { replyToId: replyingTo._id } : {}),
         }),
       });
       const d = await r.json();
@@ -191,7 +116,6 @@ function MessagesScreenInner() {
       setMessages(prev => [...prev, d.message]);
       setDraft("");
       setPendingAttachment(null);
-      setReplyingTo(null);
       setShowEmoji(false);
       setReloadKey(k => k + 1);
       setThreadKey(k => k + 1);
@@ -260,8 +184,7 @@ function MessagesScreenInner() {
             <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{openWith.name}</span>
           </div>
 
-          <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}
-            onClick={() => menuFor && setMenuFor(null)}>
+          <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
             {messages.map((m, i) => {
               const mine = m.senderId === user._id;
               // A divider whenever the calendar day changes from the
@@ -278,30 +201,7 @@ function MessagesScreenInner() {
                       {dayLabel(m.createdAt)}
                     </span>
                   )}
-                  <div
-                    style={{ alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "78%" }}
-                    onTouchStart={() => startPress(m._id)}
-                    onTouchEnd={cancelPress}
-                    onTouchMove={cancelPress}
-                    onMouseDown={() => startPress(m._id)}
-                    onMouseUp={cancelPress}
-                    onMouseLeave={cancelPress}
-                  >
-                  {m.replyTo && (
-                    <div style={{
-                      display: "flex", flexDirection: "column", gap: 1, marginBottom: 4,
-                      padding: "5px 10px", borderRadius: "12px 12px 4px 4px",
-                      background: mine ? "rgba(255,255,255,.18)" : "var(--surface2)",
-                      borderLeft: `3px solid ${mine ? "rgba(255,255,255,.65)" : "var(--accent)"}`,
-                    }}>
-                      <span style={{ fontSize: 10.5, fontWeight: 700, color: mine ? "rgba(255,255,255,.9)" : "var(--accent)" }}>
-                        {m.replyTo.senderId === user._id ? "You" : openWith.name}
-                      </span>
-                      <span className="truncate" style={{ fontSize: 11.5, color: mine ? "rgba(255,255,255,.8)" : "var(--text3)" }}>
-                        {m.replyTo.text || (m.replyTo.attachmentKind === "video" ? "Video" : m.replyTo.attachmentKind ? "Photo" : "")}
-                      </span>
-                    </div>
-                  )}
+                  <div style={{ alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "78%" }}>
                   {m.storyRef && (
                     <div style={{
                       display: "flex", alignItems: "center", gap: 8, marginBottom: 4,
@@ -323,8 +223,7 @@ function MessagesScreenInner() {
                       <video src={m.attachment.url} controls playsInline
                         style={{ display: "block", maxWidth: "100%", borderRadius: 14, marginBottom: m.text ? 4 : 0 }}/>
                     ) : (
-                      <img src={m.attachment.url} alt="" onClick={() => setViewer({ url: m.attachment!.url, kind: "image", messageId: m._id, mine })}
-                        style={{ display: "block", maxWidth: "100%", maxHeight: 260, borderRadius: 14, marginBottom: m.text ? 4 : 0, cursor: "pointer" }}/>
+                      <img src={m.attachment.url} alt="" style={{ display: "block", maxWidth: "100%", maxHeight: 260, borderRadius: 14, marginBottom: m.text ? 4 : 0 }}/>
                     )
                   )}
                   {!!m.text && (
@@ -351,33 +250,6 @@ function MessagesScreenInner() {
                         : <Check size={13} color="var(--text3)"/>
                     )}
                   </div>
-
-                  {/* Long-press (touch) or press-and-hold (mouse) on the
-                      message above opens this action row — same gesture
-                      as Instagram/WhatsApp, no extra "..." button needed. */}
-                  {menuFor === m._id && (
-                    <div style={{
-                      display: "flex", gap: 6, marginTop: 5,
-                      justifyContent: mine ? "flex-end" : "flex-start",
-                    }}>
-                      <button onClick={() => openReply(m)} className="chip"
-                        style={{ fontSize: 11, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                        <Reply size={12}/>Reply
-                      </button>
-                      {m.attachment && (
-                        <button onClick={() => { downloadAttachment(m.attachment!.url, m.attachment!.kind); setMenuFor(null); }}
-                          className="chip" style={{ fontSize: 11, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                          <Download size={12}/>Download
-                        </button>
-                      )}
-                      {mine && (
-                        <button onClick={() => deleteMessage(m)} className="chip"
-                          style={{ fontSize: 11, display: "inline-flex", alignItems: "center", gap: 4, color: "#e5484d" }}>
-                          <Trash2 size={12}/>Delete
-                        </button>
-                      )}
-                    </div>
-                  )}
                   </div>
                 </Fragment>
               );
@@ -389,30 +261,6 @@ function MessagesScreenInner() {
             borderTop: "1px solid var(--border)",
             paddingBottom: "env(safe-area-inset-bottom, 0px)",
           }}>
-            {replyingTo && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px 0" }}>
-                <div style={{
-                  flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8,
-                  background: "var(--surface2)", borderRadius: 10, padding: "6px 10px",
-                  borderLeft: "3px solid var(--accent)",
-                }}>
-                  <Reply size={14} color="var(--accent)" style={{ flex: "none" }}/>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)" }}>
-                      {replyingTo.senderId === user._id ? "Replying to yourself" : `Replying to ${openWith.name}`}
-                    </div>
-                    <div className="truncate" style={{ fontSize: 12, color: "var(--text3)" }}>
-                      {replyingTo.text || (replyingTo.attachment?.kind === "video" ? "Video" : replyingTo.attachment ? "Photo" : "")}
-                    </div>
-                  </div>
-                </div>
-                <button onClick={() => setReplyingTo(null)} aria-label="Cancel reply"
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text3)", display: "flex", flex: "none" }}>
-                  <X size={16}/>
-                </button>
-              </div>
-            )}
-
             {showEmoji && (
               <div style={{
                 display: "grid", gridTemplateColumns: "repeat(10,1fr)", gap: 2,
@@ -483,44 +331,6 @@ function MessagesScreenInner() {
             </div>
           </div>
         </div>
-
-        {/* Fullscreen tap-to-view for image attachments, with download
-            (and delete, on your own messages) actions in the header —
-            same pattern as the story viewer elsewhere in the app. */}
-        {viewer && (
-          <div
-            style={{ position: "fixed", inset: 0, zIndex: 400, background: "rgba(0,0,0,.92)", display: "flex", flexDirection: "column" }}
-            onClick={() => setViewer(null)}
-          >
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 18, padding: "16px 18px", paddingTop: "calc(16px + env(safe-area-inset-top, 0px))" }}
-              onClick={e => e.stopPropagation()}>
-              <button onClick={() => downloadAttachment(viewer.url, viewer.kind)} aria-label="Download"
-                style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", display: "flex" }}>
-                <Download size={22}/>
-              </button>
-              {viewer.mine && (
-                <button
-                  onClick={() => { const target = messages.find(x => x._id === viewer.messageId); if (target) deleteMessage(target); }}
-                  aria-label="Delete"
-                  style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", display: "flex" }}>
-                  <Trash2 size={22}/>
-                </button>
-              )}
-              <button onClick={() => setViewer(null)} aria-label="Close"
-                style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", display: "flex" }}>
-                <X size={22}/>
-              </button>
-            </div>
-            <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, minHeight: 0 }}
-              onClick={e => e.stopPropagation()}>
-              {viewer.kind === "video" ? (
-                <video src={viewer.url} controls autoPlay playsInline style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 12 }}/>
-              ) : (
-                <img src={viewer.url} alt="" style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 12, objectFit: "contain" }}/>
-              )}
-            </div>
-          </div>
-        )}
       </>
     );
   }

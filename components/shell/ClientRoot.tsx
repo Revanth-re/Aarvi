@@ -1,4 +1,5 @@
 "use client";
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import BottomNav from "./BottomNav";
 import ToastHost from "./ToastHost";
@@ -7,10 +8,21 @@ import SettingsSync from "./SettingsSync";
 import Player from "./Player";
 import ListeningTracker from "./ListeningTracker";
 import InstallPrompt from "./InstallPrompt";
+import { registerServiceWorker } from "@/lib/push-client";
 
 export default function ClientRoot({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const isAdmin = path.startsWith("/admin");
+
+  // Registered unconditionally on every load — not gated behind the
+  // user opting into push. A service worker only counts toward PWA
+  // installability (Chrome's beforeinstallprompt, PWABuilder's audit,
+  // "Add to Home Screen" everywhere) if it's actually controlling the
+  // page, which never happens if registration waits for a Settings
+  // toggle nobody's touched yet.
+  useEffect(() => {
+    registerServiceWorker();
+  }, []);
 
   return (
     <>

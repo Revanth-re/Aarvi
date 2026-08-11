@@ -155,10 +155,7 @@ export default function Player() {
       />
 
       {/* ── Mini bar, sits directly above the tab bar ── */}
-      <div style={{
-        position: "fixed", bottom: "calc(var(--nav-h) + env(safe-area-inset-bottom, 0px))",
-        left: "50%", transform: "translateX(-50%)",
-        width: "100%", maxWidth: 480, zIndex: 110,
+      <div className="player-bar" style={{
         background: "var(--surface)", borderTop: "1px solid var(--border)",
         boxShadow: "0 -4px 24px rgba(0,0,0,.10)",
       }}>

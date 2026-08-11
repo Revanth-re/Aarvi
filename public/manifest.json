@@ -1,16 +1,45 @@
 {
+  "id": "/",
   "name": "SWARA FM — Audio stories, in your language",
   "short_name": "SWARA FM",
   "description": "Audio drama, shorts and thoughts. Listen, react, collect.",
+  "lang": "en",
+  "dir": "ltr",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
   "orientation": "portrait",
   "background_color": "#F5F1FC",
   "theme_color": "#8B5CF6",
+  "categories": ["entertainment", "music", "lifestyle"],
+  "prefer_related_applications": false,
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Discover",
+      "short_name": "Discover",
+      "description": "Find new series and creators",
+      "url": "/discover",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Library",
+      "short_name": "Library",
+      "description": "Your saved and in-progress stories",
+      "url": "/library",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Shorts",
+      "short_name": "Shorts",
+      "description": "Quick audio shorts",
+      "url": "/shorts",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
   ]
 }

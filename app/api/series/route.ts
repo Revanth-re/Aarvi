@@ -1,51 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { SeriesModel } from "@/models/Series";
-import { UserModel } from "@/models/User";
-import { NotificationModel } from "@/models/Notification";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { requireUser } from "@/lib/requireUser";
 import { processEpisodeTranscripts } from "@/lib/gemini";
-import { sendPushToUser } from "@/lib/push";
-import { idOf } from "@/lib/serialize";
 import { VIBES } from "@/types";
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
-// Tells everyone who follows this creator that they just published —
-// same weight as a new follower notification (in-app always, push if
-// that device has it enabled). Never blocks or fails the publish
-// itself if something here goes wrong; it's a nice-to-have on top of
-// a successful series creation, not a precondition for one.
-async function notifyFollowersOfNewSeries(creatorId: string, seriesId: string, title: string) {
-  try {
-    const [author, followers] = await Promise.all([
-      UserModel.findById(creatorId).select("name").lean<any>(),
-      UserModel.find({ following: creatorId }).select("_id settings").lean<any[]>(),
-    ]);
-    if (!followers.length) return;
-
-    const authorName = author?.name || "Someone you follow";
-    await NotificationModel.insertMany(followers.map(f => ({
-      userId: idOf(f._id),
-      category: "drops",
-      type: "new_series",
-      title: `${authorName} published a new series`,
-      message: title,
-      link: `/series/${seriesId}`,
-      fromUserId: creatorId,
-      fromUserName: authorName,
-    })));
-
-    await Promise.all(followers.map(f =>
-      f.settings?.notif?.newMessages !== false
-        ? sendPushToUser(idOf(f._id), { title: authorName, body: `New series: ${title}`, url: `/series/${seriesId}` })
-        : Promise.resolve()
-    ));
-  } catch {
-    // Best-effort — see comment above.
-  }
-}
 
 // Give transcript generation (Gemini upload + processing) room to run
 // before the platform's default serverless timeout kicks in. Actual
@@ -56,6 +15,7 @@ export async function GET(req: NextRequest) {
   try {
     await connectDB();
     const p = req.nextUrl.searchParams;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const q: any = {};
     if (p.get("genre") && p.get("genre") !== "All") q.genre = p.get("genre");
     if (p.get("featured") === "true") q.isFeatured = true;
@@ -123,17 +83,6 @@ export async function POST(req: NextRequest) {
       episodes, totalEpisodes: episodes.length,
       ...(creatorId ? { creatorId, isFeatured: false, isTrending: false } : {}),
     });
-
-    // Only a real creator publishing their own show notifies their
-    // followers — admin-seeded/house content has no "creator" a
-    // follow relationship makes sense for. Awaited (not fire-and-forget)
-    // because a serverless function can get torn down right after the
-    // response is sent, which would silently kill a detached async call
-    // before it finishes — see the identical note in app/api/messages.
-    if (creatorId) {
-      await notifyFollowersOfNewSeries(creatorId, idOf(doc._id), doc.title);
-    }
-
     return NextResponse.json(doc, { status: 201 });
   } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }
 }

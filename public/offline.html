@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+<meta name="theme-color" content="#8B5CF6"/>
+<title>You're offline — SWARA FM</title>
+<style>
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; text-align: center; padding: 32px;
+    background: #F7F3FC; color: #1E1730;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .logo {
+    width: 56px; height: 56px; border-radius: 16px;
+    background: linear-gradient(135deg, #9B6BF3, #C79BF0);
+  }
+  h1 { font-size: 18px; margin: 0; }
+  p { font-size: 14px; color: #4B4160; margin: 0; max-width: 320px; }
+  button {
+    margin-top: 8px; padding: 10px 20px; border: none; border-radius: 999px;
+    background: linear-gradient(135deg, #9B6BF3, #C79BF0); color: #fff;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #12101B; color: #F2EEFB; }
+    p { color: #B4A9CC; }
+  }
+</style>
+</head>
+<body>
+  <div class="logo"></div>
+  <h1>You're offline</h1>
+  <p>SWARA FM needs a connection to stream stories. Reconnect and try again.</p>
+  <button onclick="location.reload()">Retry</button>
+</body>
+</html>

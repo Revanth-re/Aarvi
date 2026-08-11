@@ -84,6 +84,7 @@
   border-top: 1px solid var(--border);
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+.bottom-nav-inner { height: var(--nav-h); display: flex; align-items: center; }
 /* Settings → Tab bar style */
 .bottom-nav[data-style="transparent"] {
   background: color-mix(in srgb, var(--bg2) 82%, transparent);
@@ -103,6 +104,7 @@
   transition: background .18s;
 }
 .nav-item[data-active="true"] .nav-icon-wrap { background: var(--accent); color: #fff; }
+.nav-label { font-size: 10px; }
 
 /* ── Primitives ── */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow); }
@@ -137,6 +139,12 @@ textarea.inp { border-radius: var(--r); resize: vertical; line-height: 1.6; }
   border: 1px solid var(--border2); transition: all .15s;
 }
 .chip[data-active="true"] { background: var(--grad); color: #fff; border-color: transparent; }
+
+.player-bar {
+  position: fixed; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
+  left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: 480px; z-index: 110;
+}
 
 .pill-badge {
   position: absolute; top: 8px; left: 8px;
@@ -202,3 +210,69 @@ textarea.inp { border-radius: var(--r); resize: vertical; line-height: 1.6; }
 /* The admin panel is not part of the phone shell, so it opts out of
    the centred frame and keeps a full-width desktop layout. */
 .admin-root { max-width: none; box-shadow: none; }
+
+/* ══════════════════════════════════════════════════════════
+   Desktop / laptop layout (≥1024px)
+   ══════════════════════════════════════════════════════════
+   Every rule above this point (including every rule up to and
+   including 1023px viewports — phones AND tablets) is completely
+   untouched. Nothing here overrides anything below 1024px, so the
+   mobile view is pixel-identical to before.
+
+   Below 1024px the app is still the phone-width column it always was.
+   At 1024px+ we turn the bottom tab bar into a fixed left sidebar and
+   let the content column breathe in a wider layout, instead of a
+   480px phone screen floating alone in the middle of an otherwise
+   empty browser window. */
+@media (min-width: 1024px) {
+  :root { --sidebar-w: 232px; --content-gutter: 40px; }
+
+  /* Phone-width column → fills the full remaining width next to the
+     sidebar (not a fixed narrow column), so the app uses the whole
+     browser window instead of floating in a sea of empty background.
+     Capped at 1600px purely so text/cards don't stretch absurdly on
+     ultrawide monitors. The admin panel already manages its own
+     desktop layout via .admin-root, so it's excluded. */
+  .app-frame:not(.admin-root) {
+    width: calc(100% - var(--sidebar-w) - (var(--content-gutter) * 2));
+    max-width: 1600px;
+    margin: 0 auto 0 calc(var(--sidebar-w) + var(--content-gutter));
+  }
+
+  /* Bottom tab bar → left sidebar nav. */
+  .bottom-nav {
+    top: 0; bottom: 0; left: 0; right: auto; transform: none;
+    width: var(--sidebar-w); max-width: none;
+    border-top: none; border-right: 1px solid var(--border);
+    padding-bottom: 0;
+  }
+  .bottom-nav[data-style="transparent"] { backdrop-filter: none; -webkit-backdrop-filter: none; }
+
+  .bottom-nav-inner {
+    height: auto; flex-direction: column; align-items: stretch;
+    gap: 4px; padding: 24px 14px;
+  }
+
+  .nav-item {
+    flex: none; flex-direction: row; justify-content: flex-start;
+    gap: 12px; padding: 11px 14px; border-radius: var(--r-pill);
+  }
+  .nav-item[data-active="true"] { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .nav-item .nav-icon-wrap { width: auto; height: auto; }
+  .nav-item[data-active="true"] .nav-icon-wrap { background: none; color: var(--accent); }
+  .nav-label { font-size: 14px; }
+
+  /* The mini player docks as a floating card spanning the same width
+     as the content column, above it, instead of centring itself over
+     the whole browser window. */
+  .player-bar {
+    left: calc(var(--sidebar-w) + var(--content-gutter));
+    transform: none;
+    width: calc(100% - var(--sidebar-w) - (var(--content-gutter) * 2));
+    max-width: 1600px;
+    bottom: 24px; border-radius: var(--r-lg);
+  }
+
+  /* No bottom nav to clear any more — just the floating player. */
+  .screen { padding-bottom: 110px; }
+}
