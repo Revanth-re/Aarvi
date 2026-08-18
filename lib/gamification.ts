@@ -178,6 +178,24 @@ export function formatTime(sec: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+/**
+ * Average episode length in whole minutes, from durations in seconds.
+ * Backs Series.avgMinutes, which the Home screen's "Under 10 minutes"
+ * rail filters on (see app/api/home/route.ts) — computed here so every
+ * series-publish path (Creator Studio, Admin, the one-time demo seed)
+ * populates it the same way instead of each reimplementing it, or
+ * worse, leaving it at the schema default of 0 and silently never
+ * showing up in that rail regardless of actual episode length.
+ * Episodes with no duration yet (audio not uploaded/generated) are
+ * excluded rather than counted as 0, so one still-drafting episode
+ * doesn't drag a real average down.
+ */
+export function avgEpisodeMinutes(episodes: { duration?: number }[]): number {
+  const durations = episodes.map(e => e.duration || 0).filter(d => d > 0);
+  if (!durations.length) return 0;
+  return Math.round(durations.reduce((a, b) => a + b, 0) / durations.length / 60);
+}
+
 /** "2h", "5m", "1d" — relative time for feeds and notifications. */
 export function timeAgo(iso: string | Date): string {
   const then = typeof iso === "string" ? new Date(iso).getTime() : iso.getTime();
@@ -218,6 +236,37 @@ export function gradientFor(seed: string): string {
   for (let i = 0; i < seed.length; i++) h = seed.charCodeAt(i) + ((h << 5) - h);
   const [a, b] = PAIRS[Math.abs(h) % PAIRS.length];
   return `linear-gradient(160deg,${a},${b})`;
+}
+
+/**
+ * Explicit colour per genre, for the "Browse genres" grid (Settings →
+ * Appearance references these as the 10 existing genre colour styles
+ * plus Devotional/Friendship). gradientFor() above hashes an arbitrary
+ * seed (series/story id) into one of 8 gradients, which is fine for
+ * cards but collides too often to guarantee 12 *genres* each look
+ * distinct — so genre chips get their own fixed, collision-free map.
+ * Anything not in this list (legacy admin-only genres, etc.) still
+ * falls back to gradientFor so it never renders unstyled.
+ */
+const GENRE_COLORS: Record<string, [string, string]> = {
+  "Thriller":       ["#B06AB3", "#4568DC"],
+  "Romance":        ["#F43F5E", "#8B5CF6"],
+  "Mythology":      ["#5B8DEF", "#9B6BF5"],
+  "Horror":         ["#22C55E", "#0EA5E9"],
+  "Mystery":        ["#0EA5E9", "#38BDF8"],
+  "Comedy":         ["#1F9E8F", "#0D5F6E"],
+  "Sci-Fi":         ["#E05A2B", "#F0A13C"],
+  "Coming of Age":  ["#8B5CF6", "#C4A6F5"],
+  "True Crime":     ["#EF4444", "#7C2D12"],
+  "Campus":         ["#06B6D4", "#3B82F6"],
+  "Devotional":     ["#EAB308", "#CA8A04"],
+  "Friendship":     ["#F0563C", "#C94BA0"],
+};
+
+export function genreColor(genre: string): string {
+  const pair = GENRE_COLORS[genre];
+  if (!pair) return gradientFor(genre);
+  return `linear-gradient(160deg,${pair[0]},${pair[1]})`;
 }
 
 /** Deterministic waveform bar heights (22 bars, 22–99%). */

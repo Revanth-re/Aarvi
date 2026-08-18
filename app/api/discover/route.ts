@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     const following: string[] = meDoc?.following ?? [];
 
     // ── Matched for you ──
-    const q: any = {};
+    const q: any = { isDraft: { $ne: true } };
     if (language && language !== "All") q.language = language;
 
     if (vibe) {
@@ -51,12 +51,12 @@ export async function GET(req: NextRequest) {
         .select("name handle image").lean<any[]>();
       const creatorById = new Map(creators.map(c => [idOf(c._id), c]));
 
-      const theirSeries = await SeriesModel.find({ creatorId: { $in: following } })
+      const theirSeries = await SeriesModel.find({ creatorId: { $in: following }, isDraft: { $ne: true } })
         .select("-episodes.transcript -episodes.transcriptSegments")
         .sort({ updatedAt: -1 }).limit(6).lean<any[]>();
 
       followingRows = theirSeries.map(s => {
-        const eps = s.episodes || [];
+        const eps = (s.episodes || []).filter((e: any) => !e.isDraft);
         return {
           series: { ...s, _id: idOf(s._id) } as any,
           // Highest episode number, not last in the array — episodes

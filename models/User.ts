@@ -9,6 +9,7 @@ const SettingsSchema = new Schema({
   themeColor:  { type: String, enum: ["lavender","rosegold","mint","cyberblue","peach","midnight"], default: "lavender" },
   themeMode:   { type: String, enum: ["light","dark","system"], default: "light" },
   tabBarStyle: { type: String, enum: ["transparent","normal"], default: "transparent" },
+  fontStyle:   { type: String, enum: ["sora","neo","slab","rounded","serif","playful","handwritten","retro"], default: "sora" },
 
   notif: {
     episodeDrops:   { type: Boolean, default: true },
@@ -20,6 +21,20 @@ const SettingsSchema = new Schema({
     // the in-app notification bell, which always shows these
     // regardless of this setting. See lib/push.ts.
     newMessages:    { type: Boolean, default: true },
+    // The three additional push triggers from the Notifications &
+    // Privacy settings page — see lib/notify.ts's notifyAndPush(),
+    // which is what actually reads these (the in-app Notification
+    // always gets written regardless; these only gate the push).
+    follows:        { type: Boolean, default: true },
+    tips:           { type: Boolean, default: true },
+    storyUpdates:   { type: Boolean, default: true },
+  },
+  // Push is suppressed (in-app notification still written) between
+  // start and end, local "HH:mm" 24h time. See notifyAndPush().
+  quietHours: {
+    enabled: { type: Boolean, default: false },
+    start:   { type: String, default: "22:00" },
+    end:     { type: String, default: "07:00" },
   },
   playback: {
     autoplayNext: { type: Boolean, default: true },
@@ -133,6 +148,11 @@ const UserSchema = new Schema({
   /** "<seriesId>:<episodeId>" keys bought with coins. Per-user on
    *  purpose: flipping isLocked on the series would unlock it for all. */
   unlockedEpisodes: [{ type: String }],
+  // "seriesId:episodeId" keys, same shape/convention as unlockedEpisodes
+  // above. One-tap save-for-later, distinct from the full Playlist
+  // system (which exists but has no frontend UI) — see
+  // /api/users/[id]/bookmarks.
+  bookmarkedEpisodes: [{ type: String }],
 
   /** Who invited this user, so the referral bonus pays exactly once. */
   invitedBy:     { type: String, default: "" },

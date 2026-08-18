@@ -2,7 +2,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Palette, Bell, Headphones, Timer, Download, Shield, Sun, Moon, Monitor, Layers, LogOut, UserX, FileText, ChevronRight } from "lucide-react";
+import { Palette, Bell, Headphones, Timer, Download, Shield, Sun, Moon, Monitor, Layers, LogOut, UserX, FileText, ChevronRight, Type } from "lucide-react";
 import { ThemeMode, TabBarStyle, UserSettings } from "@/types";
 import { useApp, useDataCache, useToast } from "@/store";
 import { pushSupported, enablePush, disablePush } from "@/lib/push-client";
@@ -139,7 +139,7 @@ export default function SettingsScreen() {
           </div>
 
           <Label>Tab bar style</Label>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
             {(["transparent", "normal"] as TabBarStyle[]).map(k => {
               const on = settings.tabBarStyle === k;
               return (
@@ -157,6 +157,16 @@ export default function SettingsScreen() {
               );
             })}
           </div>
+
+          <Link href="/settings/fonts" style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "11px 0", textDecoration: "none", color: "var(--text)", fontSize: 13.5,
+          }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Type size={15} color="var(--accent)"/>Font style
+            </span>
+            <ChevronRight size={16} color="var(--text3)"/>
+          </Link>
         </Group>
 
         {/* ── Notifications ── */}

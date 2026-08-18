@@ -23,8 +23,21 @@ const ThoughtSchema = new Schema({
   /** Set when this is a reply to another thought. */
   parentId: { type: String, default: null, index: true },
 
-  /** Mirrors User.settings.privacy.publicThoughts at post time. */
+  /** Mirrors User.settings.privacy.publicThoughts at post time. Kept
+   *  for backward compatibility — `visibility` below is the source of
+   *  truth going forward; isPublic is just (visibility === "public"). */
   isPublic: { type: Boolean, default: true },
+
+  /** Quick privacy preset — see the comment on Episode.visibility in
+   *  models/Series.ts for the general design. "followers" is the
+   *  historical default (isPublic:true showed to anyone, which in
+   *  practice was always read through a follow-scoped feed anyway). */
+  visibility: { type: String, enum: ["public", "followers", "private"], default: "followers" },
+
+  /** Set by an admin acting on an abuse Report (see models/Report.ts)
+   *  — excluded from every read except the moderation log. Distinct
+   *  from a user deleting their own thought (that's a hard delete). */
+  hiddenByModeration: { type: Boolean, default: false },
 
   createdAt: { type: Date, default: Date.now },
 });

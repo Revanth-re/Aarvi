@@ -1,12 +1,13 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Camera, Loader2 } from "lucide-react";
+import { ArrowLeft, Camera, Loader2, Eye } from "lucide-react";
 import { useApp, useToast } from "@/store";
 import { creatorFetch } from "@/lib/creatorFetch";
 import { Screen } from "@/components/kit";
 import TopBar from "@/components/shell/TopBar";
 import Avatar from "@/components/ui/Avatar";
+import PhotoEditorModal from "@/components/screens/PhotoEditorModal";
 
 export default function EditProfilePage() {
   const router = useRouter();
@@ -19,13 +20,26 @@ export default function EditProfilePage() {
   const [image, setImage] = useState(user?.image ?? "");
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
+  // A newly picked file never applies straight to the avatar — it goes
+  // through the crop/filter editor first, and only what the person
+  // explicitly confirms there gets uploaded.
+  const [editingSrc, setEditingSrc] = useState<string | null>(null);
 
-  const pickPhoto = async (file: File) => {
+  const pickFile = (file: File) => {
     if (!file.type.startsWith("image/")) { showToast("Choose an image file", "error"); return; }
+    const reader = new FileReader();
+    reader.onload = () => setEditingSrc(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const confirmEdit = async (dataUrl: string) => {
+    setEditingSrc(null);
     setUploading(true);
     try {
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", new File([blob], "avatar.jpg", { type: "image/jpeg" }));
       const r = await creatorFetch("/api/upload", { method: "POST", body: fd });
       const d = await r.json();
       if (!r.ok || !d.url) throw new Error(d.error || "Upload failed");
@@ -74,7 +88,7 @@ export default function EditProfilePage() {
         <div style={{ display: "flex", justifyContent: "center" }}>
           <label style={{ position: "relative", cursor: "pointer", display: "inline-block" }}>
             <input type="file" accept="image/*" hidden disabled={uploading}
-              onChange={e => { const f = e.target.files?.[0]; if (f) pickPhoto(f); }}/>
+              onChange={e => { const f = e.target.files?.[0]; if (f) pickFile(f); e.target.value = ""; }}/>
             <Avatar name={name} image={image} size={80}/>
             <span style={{
               position: "absolute", bottom: 0, right: 0, width: 28, height: 28, borderRadius: "50%",
@@ -107,7 +121,18 @@ export default function EditProfilePage() {
         <button onClick={save} disabled={busy} className="btn btn-primary" style={{ width: "100%" }}>
           {busy ? "Saving…" : "Save changes"}
         </button>
+
+        <a href={`/u/${user._id}?preview=1`} style={{
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+          fontSize: 12.5, color: "var(--text3)", textDecoration: "none", padding: "4px 0",
+        }}>
+          <Eye size={13}/>Preview how your profile looks to others
+        </a>
       </Screen>
+
+      {editingSrc && (
+        <PhotoEditorModal src={editingSrc} onCancel={() => setEditingSrc(null)} onConfirm={confirmEdit}/>
+      )}
     </>
   );
 }

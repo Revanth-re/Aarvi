@@ -1,5 +1,6 @@
 import { UserModel } from "@/models/User";
 import { CoinTxModel } from "@/models/CoinTx";
+import { ListeningLogModel } from "@/models/ListeningLog";
 import { CoinReason } from "@/types";
 import { advanceStreak, dailyGoalReward, dayKey, hourOfDay, levelFromSeconds } from "./gamification";
 
@@ -58,7 +59,16 @@ export async function recordListening(
   if (seconds > 0) {
     // Clamped: a heartbeat should never report more than a few minutes,
     // so anything larger is a bug or a forged request, not listening.
-    user.listenSeconds = (user.listenSeconds ?? 0) + Math.min(seconds, 900);
+    const clamped = Math.min(seconds, 900);
+    user.listenSeconds = (user.listenSeconds ?? 0) + clamped;
+
+    // Daily breakdown for the Wrapped/stats screen — User.listenSeconds
+    // is only ever a lifetime total, this is what gives it a shape.
+    await ListeningLogModel.findOneAndUpdate(
+      { userId, dayKey: today },
+      { $inc: { seconds: clamped } },
+      { upsert: true }
+    ).catch(() => {}); // decorative — never block the heartbeat over this
 
     const h = hourOfDay(now);
     if (h >= 0 && h < 4) user.nightOwl = true;

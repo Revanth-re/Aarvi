@@ -8,6 +8,7 @@ import { useApp, resolveTheme } from "@/store";
 export default function ThemeSync() {
   const themeColor = useApp(s => s.settings.themeColor);
   const themeMode = useApp(s => s.settings.themeMode);
+  const fontStyle = useApp(s => s.settings.fontStyle);
 
   useEffect(() => {
     const apply = () =>
@@ -20,6 +21,10 @@ export default function ThemeSync() {
     mql.addEventListener("change", apply);
     return () => mql.removeEventListener("change", apply);
   }, [themeColor, themeMode]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-font", fontStyle || "sora");
+  }, [fontStyle]);
 
   return null;
 }

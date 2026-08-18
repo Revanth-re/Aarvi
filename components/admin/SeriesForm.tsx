@@ -6,7 +6,7 @@ import { Plus, Trash2, ChevronDown, ChevronUp, Save, ArrowLeft, RefreshCw, Check
 import FileUpload from "./FileUpload";
 import { adminFetch } from "@/lib/adminFetch";
 
-const GENRES = ["Thriller","Historical Adventure","Romance Drama","Sci-Fi","Folklore","Cyber Thriller","Comedy","Horror","Fantasy","True Crime","News","Education","Kids"];
+const GENRES = ["Thriller","Historical Adventure","Romance Drama","Sci-Fi","Folklore","Cyber Thriller","Comedy","Horror","Fantasy","True Crime","News","Education","Kids","Devotional","Friendship"];
 
 interface Props { initial?: Partial<Series>; isEdit?: boolean; }
 

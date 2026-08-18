@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
-  Episode, Series, User, UserSettings, ThemeColor, ThemeMode, TabBarStyle,
+  Episode, Series, User, UserSettings, ThemeColor, ThemeMode, TabBarStyle, FontStyle,
 } from "@/types";
 
 // ══════════════════════════════════════════════════════════
@@ -15,10 +15,13 @@ export const DEFAULT_SETTINGS: UserSettings = {
   themeColor: "lavender",
   themeMode: "light",
   tabBarStyle: "transparent",
+  fontStyle: "sora",
   notif: {
     episodeDrops: true, creatorStories: true, coinRewards: true,
     thoughtReplies: true, weeklyRecap: false, newMessages: true,
+    follows: true, tips: true, storyUpdates: true,
   },
+  quietHours: { enabled: false, start: "22:00", end: "07:00" },
   playback: {
     autoplayNext: true, skipIntro: true, fadeOnSleep: true, dataSaver: false,
   },
@@ -122,6 +125,7 @@ interface AppStore {
   setThemeColor: (c: ThemeColor) => void;
   setThemeMode: (m: ThemeMode) => void;
   setTabBarStyle: (s: TabBarStyle) => void;
+  setFontStyle: (f: FontStyle) => void;
   toggleLike: (id: string) => void;
   markStorySeen: (userId: string) => void;
 }
@@ -143,6 +147,7 @@ export const useApp = create<AppStore>()(persist((set) => ({
   setThemeColor: (c) => set((s) => ({ settings: { ...s.settings, themeColor: c } })),
   setThemeMode: (m) => set((s) => ({ settings: { ...s.settings, themeMode: m } })),
   setTabBarStyle: (t) => set((s) => ({ settings: { ...s.settings, tabBarStyle: t } })),
+  setFontStyle: (f) => set((s) => ({ settings: { ...s.settings, fontStyle: f } })),
 
   toggleLike: (id) => set((s) => ({
     liked: s.liked.includes(id) ? s.liked.filter(x => x !== id) : [...s.liked, id],

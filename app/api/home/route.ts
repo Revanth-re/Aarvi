@@ -23,9 +23,37 @@ export async function GET(req: NextRequest) {
     const lean = "-episodes.transcript -episodes.transcriptSegments";
 
     const [trending, underTen] = await Promise.all([
-      SeriesModel.find({}).select(lean).sort({ isTrending: -1, totalPlays: -1 }).limit(10).lean<any[]>(),
-      SeriesModel.find({ avgMinutes: { $gt: 0, $lte: SHORT_EPISODE_MAX_MINUTES } })
-        .select(lean).sort({ totalPlays: -1 }).limit(10).lean<any[]>(),
+      SeriesModel.find({ isDraft: { $ne: true } }).select(lean).sort({ isTrending: -1, totalPlays: -1 }).limit(10).lean<any[]>(),
+      // Computed live from each series' own episodes rather than
+      // trusting the cached Series.avgMinutes field — that field is
+      // only ever refreshed on a subsequent create/edit (see
+      // app/api/series/route.ts), so any series published before that
+      // logic existed would silently and permanently never qualify
+      // here even with genuinely short episodes. This can't go stale.
+      SeriesModel.aggregate([
+        { $match: { isDraft: { $ne: true } } },
+        { $addFields: {
+            _shortDurs: {
+              $filter: {
+                input: "$episodes", as: "e",
+                cond: { $and: [{ $gt: ["$$e.duration", 0] }, { $ne: ["$$e.isDraft", true] }] },
+              },
+            },
+        } },
+        { $addFields: {
+            _avgMinutes: {
+              $cond: [
+                { $gt: [{ $size: "$_shortDurs" }, 0] },
+                { $round: [{ $divide: [{ $avg: "$_shortDurs.duration" }, 60] }, 0] },
+                0,
+              ],
+            },
+        } },
+        { $match: { _avgMinutes: { $gt: 0, $lte: SHORT_EPISODE_MAX_MINUTES } } },
+        { $sort: { totalPlays: -1 } },
+        { $limit: 10 },
+        { $project: { "episodes.transcript": 0, "episodes.transcriptSegments": 0, _shortDurs: 0, _avgMinutes: 0 } },
+      ]) as Promise<any[]>,
     ]);
 
     // ── Continue listening ──

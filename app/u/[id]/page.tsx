@@ -1,14 +1,14 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useApp, useToast } from "@/store";
 import { creatorFetch } from "@/lib/creatorFetch";
 import Avatar from "@/components/ui/Avatar";
 import { Screen, EmptyState } from "@/components/kit";
 import { gradientFor } from "@/lib/gamification";
 import TopBar from "@/components/shell/TopBar";
-import { UserPlus, UserCheck, Clock, MessageCircle, Disc3 } from "lucide-react";
+import { UserPlus, UserCheck, Clock, MessageCircle, Disc3, Eye } from "lucide-react";
 import { Series } from "@/types";
 
 /* eslint-disable @next/next/no-img-element */
@@ -20,35 +20,50 @@ interface PublicUser {
 
 // The "someone else's profile" screen — Instagram-style header (avatar,
 // name/handle, follower/following counts, follow + message buttons)
-// with a grid of their published series underneath.
+// with a grid of their published series underneath. Also doubles as
+// your own "profile preview" (see ProfileScreen's "Preview profile"
+// link) via ?preview=1, which is the only thing that suppresses the
+// self-redirect below.
 export default function PublicProfilePage() {
   const { id } = useParams() as { id: string };
+  const searchParams = useSearchParams();
+  const preview = searchParams.get("preview") === "1";
   const router = useRouter();
   const { user, setUser } = useApp();
   const showToast = useToast(s => s.show);
 
   const [profile, setProfile] = useState<PublicUser | null>(null);
   const [posts, setPosts] = useState<Series[]>([]);
+  const [credited, setCredited] = useState<Series[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [messaging, setMessaging] = useState(false);
 
+  const isSelf = !!user && id === user._id;
+
   useEffect(() => {
     if (!id) return;
-    if (user && id === user._id) { router.replace("/profile"); return; }
+    if (isSelf && !preview) { router.replace("/profile"); return; }
     let cancelled = false;
 
     Promise.all([
       fetch(`/api/users/${id}`).then(r => r.json()),
       fetch(`/api/series?creatorId=${id}&limit=60`).then(r => r.json()),
-    ]).then(([p, s]) => {
+      fetch(`/api/series?taggedUserId=${id}&limit=60`).then(r => r.json()),
+    ]).then(([p, s, c]) => {
       if (cancelled) return;
       if (!p.error) setProfile(p);
       if (Array.isArray(s)) setPosts(s);
+      // Credits section is for work they contributed to but don't own
+      // outright — drop anything that's already in "posts".
+      if (Array.isArray(c)) {
+        const ownIds = new Set((Array.isArray(s) ? s : []).map((x: Series) => x._id));
+        setCredited(c.filter((x: Series) => !ownIds.has(x._id)));
+      }
     }).catch(() => {}).finally(() => { if (!cancelled) setLoaded(true); });
 
     return () => { cancelled = true; };
-  }, [id, user?._id]);
+  }, [id, user?._id, preview, isSelf]);
 
   const isFollowing = user ? (user.following || []).includes(id) : false;
   const isRequested = user ? (user.followRequestsSent || []).includes(id) : false;
@@ -105,6 +120,17 @@ export default function PublicProfilePage() {
     <>
       <TopBar title={profile.name}/>
       <Screen>
+        {preview && isSelf && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8, padding: "10px 12px",
+            borderRadius: 12, background: "color-mix(in srgb, var(--accent) 12%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--accent) 30%, transparent)",
+            fontSize: 12, color: "var(--accent)", fontWeight: 600,
+          }}>
+            <Eye size={14}/> This is how your profile looks to other people
+          </div>
+        )}
+
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <Avatar name={profile.name} image={profile.image} size={72}/>
           <div style={{ minWidth: 0, flex: 1 }}>
@@ -129,16 +155,18 @@ export default function PublicProfilePage() {
           </Link>
         </div>
 
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            className={`btn btn-sm ${isFollowing || isRequested ? "btn-ghost" : "btn-primary"}`}
-            onClick={toggleFollow} disabled={busy} style={{ flex: 1, justifyContent: "center" }}>
-            {isFollowing ? <><UserCheck size={14}/>Following</> : isRequested ? <><Clock size={14}/>Requested</> : <><UserPlus size={14}/>Follow</>}
-          </button>
-          <button className="btn btn-soft btn-sm" onClick={message} disabled={messaging} style={{ flex: 1, justifyContent: "center" }}>
-            <MessageCircle size={14}/>Message
-          </button>
-        </div>
+        {!(preview && isSelf) && (
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              className={`btn btn-sm ${isFollowing || isRequested ? "btn-ghost" : "btn-primary"}`}
+              onClick={toggleFollow} disabled={busy} style={{ flex: 1, justifyContent: "center" }}>
+              {isFollowing ? <><UserCheck size={14}/>Following</> : isRequested ? <><Clock size={14}/>Requested</> : <><UserPlus size={14}/>Follow</>}
+            </button>
+            <button className="btn btn-soft btn-sm" onClick={message} disabled={messaging} style={{ flex: 1, justifyContent: "center" }}>
+              <MessageCircle size={14}/>Message
+            </button>
+          </div>
+        )}
 
         <div>
           <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>Posts</div>
@@ -163,6 +191,37 @@ export default function PublicProfilePage() {
               body={`${profile.name.split(" ")[0]} hasn't published a series yet.`}/>
           )}
         </div>
+
+        {!!credited.length && (
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>
+              Credits — voice-over &amp; contributions
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {credited.map(s => {
+                const myCredit = s.credits?.find(c => c.userId === id);
+                return (
+                  <Link key={s._id} href={`/series/${s._id}`} style={{
+                    display: "flex", alignItems: "center", gap: 10, textDecoration: "none",
+                  }} className="card">
+                    <div style={{
+                      width: 44, height: 44, borderRadius: 10, overflow: "hidden", flex: "none",
+                      background: gradientFor(s._id),
+                    }}>
+                      {s.coverImage && (
+                        <img src={s.coverImage} alt={s.title} style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
+                      )}
+                    </div>
+                    <span style={{ minWidth: 0 }}>
+                      <span className="truncate" style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--text)" }}>{s.title}</span>
+                      <span style={{ display: "block", fontSize: 11, color: "var(--text3)" }}>{myCredit?.role || "Contributor"}</span>
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </Screen>
     </>
   );

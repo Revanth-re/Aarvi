@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Mic, Pencil, MessageSquare, Settings as Cog, Flame, Headphones, MessageCircle, UserCheck, Download } from "lucide-react";
+import { Mic, Pencil, MessageSquare, Settings as Cog, Flame, Headphones, MessageCircle, UserCheck, Download, Share2, Eye, BarChart3, Archive } from "lucide-react";
 import { DnaSlice, Thought } from "@/types";
-import { useApp, useDataCache, cacheKeyFor, useInstallPrompt } from "@/store";
+import { useApp, useDataCache, cacheKeyFor, useInstallPrompt, useToast } from "@/store";
 import { formatCount } from "@/lib/gamification";
 import { Screen, SectionHeader, Cover, EmptyState } from "@/components/kit";
 import TopBar, { CoinGlyph } from "@/components/shell/TopBar";
@@ -21,6 +21,15 @@ interface ProfileCache { game: Game | null; dna: DnaSlice[]; recent: RecentItem[
 export default function ProfileScreen() {
   const user = useApp(s => s.user);
   const showInstallPrompt = useInstallPrompt(s => s.show);
+  const showToast = useToast(s => s.show);
+
+  const shareAppLink = async () => {
+    const url = typeof window !== "undefined" ? window.location.origin : "";
+    try {
+      if (navigator.share) await navigator.share({ title: "SWARA FM", text: "Listen with me on SWARA FM", url });
+      else { await navigator.clipboard.writeText(url); showToast("Link copied", "success"); }
+    } catch { /* dismissed */ }
+  };
 
   const cacheKey = cacheKeyFor("profile", user?._id);
   const cached = useDataCache(s => s.cache[cacheKey]) as ProfileCache | undefined;
@@ -140,33 +149,54 @@ export default function ProfileScreen() {
                 </span>
               )}
             </Link>
+            <Link href={`/u/${user._id}?preview=1`} className="btn btn-xs" style={pillBtn}>
+              <Eye size={13}/>Preview
+            </Link>
             <Link href="/settings" className="btn btn-xs" style={{ ...pillBtn, padding: "5px 10px" }} aria-label="Settings"><Cog size={13}/></Link>
           </div>
         </div>
 
-        {/* ── Download the app ── */}
-        <button onClick={() => showInstallPrompt()} className="card" style={{
-          display: "flex", alignItems: "center", gap: 12, padding: "13px 14px",
-          cursor: "pointer", textAlign: "left", width: "100%",
-        }}>
-          <span style={{
-            width: 38, height: 38, borderRadius: 11, background: "var(--grad)", flex: "none",
-            display: "flex", alignItems: "center", justifyContent: "center",
+        {/* ── Download the app / Share app link ── */}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => showInstallPrompt()} className="card" style={{
+            flex: 1, display: "flex", alignItems: "center", gap: 12, padding: "13px 14px",
+            cursor: "pointer", textAlign: "left",
           }}>
-            <Download size={17} color="#fff"/>
-          </span>
-          <span style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--text)" }}>Download the app</span>
-            <span style={{ display: "block", fontSize: 11.5, color: "var(--text3)" }}>Add SWARA FM to your home screen</span>
-          </span>
-        </button>
+            <span style={{
+              width: 38, height: 38, borderRadius: 11, background: "var(--grad)", flex: "none",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <Download size={17} color="#fff"/>
+            </span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--text)" }}>Download the app</span>
+              <span style={{ display: "block", fontSize: 11.5, color: "var(--text3)" }}>Add to your home screen</span>
+            </span>
+          </button>
+          <button onClick={shareAppLink} className="card" aria-label="Share app link" style={{
+            width: 58, display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer",
+          }}>
+            <Share2 size={18} color="var(--accent)"/>
+          </button>
+        </div>
 
         {/* ── Stats ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
           <Stat icon={<CoinGlyph size={15}/>} value={formatCount(game?.coins ?? 0)} label="Coins" href="/coins"/>
-          <Stat icon={<Flame size={15}/>} value={String(game?.streak ?? 0)} label="Streak"/>
+          <Stat icon={<Flame size={15}/>} value={String(game?.streak ?? 0)} label="Streak" href="/profile/stats"/>
           <Stat icon={<Headphones size={15}/>} value={String(game?.showCount ?? 0)} label="Shows" href="/library"/>
           <Stat icon={<MessageCircle size={15}/>} value={String(thoughts.length)} label="Thoughts"/>
+        </div>
+
+        {/* ── Stats & Archive shortcuts ── */}
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link href="/profile/stats" className="btn btn-soft btn-sm" style={{ flex: 1, justifyContent: "center", textDecoration: "none" }}>
+            <BarChart3 size={14}/>Listening stats
+          </Link>
+          <Link href="/profile/archive" className="btn btn-soft btn-sm" style={{ flex: 1, justifyContent: "center", textDecoration: "none" }}>
+            <Archive size={14}/>Your archive
+          </Link>
         </div>
 
         {/* ── Listening DNA ── */}

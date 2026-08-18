@@ -33,8 +33,14 @@ export default function ClientRoot({ children }: { children: React.ReactNode }) 
       </div>
       {!isAdmin && (
         <>
-          <Player/>
-          <BottomNav/>
+          {/* .dock (see globals.css) stacks these with a real flexbox
+              gap on mobile — structurally impossible for them to
+              overlap, unlike two independently `position: fixed`
+              elements each computing their own offset. */}
+          <div className="dock">
+            <Player/>
+            <BottomNav/>
+          </div>
           {/* Headless — turns playback time into streak progress. */}
           <ListeningTracker/>
         </>

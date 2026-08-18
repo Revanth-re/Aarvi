@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Search as SearchIcon, X, TrendingUp, Compass, Mic } from "lucide-react";
 import { SearchPayload } from "@/types";
 import { useApp, useToast } from "@/store";
-import { gradientFor } from "@/lib/gamification";
+import { genreColor } from "@/lib/gamification";
 import { Screen, ShowCard, SectionHeader } from "@/components/kit";
 import TopBar from "@/components/shell/TopBar";
 import ThoughtCard from "./ThoughtCard";
@@ -13,6 +13,7 @@ import Avatar from "@/components/ui/Avatar";
 const GENRES = [
   "Thriller", "Romance", "Mythology", "Horror", "Mystery",
   "Comedy", "Sci-Fi", "Coming of Age", "True Crime", "Campus",
+  "Devotional", "Friendship",
 ];
 
 export default function SearchScreen() {
@@ -157,7 +158,7 @@ export default function SearchScreen() {
                 {GENRES.map(g => (
                   <Link key={g} href={`/discover?genre=${encodeURIComponent(g)}`}
                     style={{
-                      height: 62, borderRadius: "var(--r-pill)", background: gradientFor(g),
+                      height: 62, borderRadius: "var(--r-pill)", background: genreColor(g),
                       display: "flex", alignItems: "center", padding: "0 18px",
                       textDecoration: "none", color: "#fff", fontSize: 14, fontWeight: 700,
                       textShadow: "0 1px 3px rgba(0,0,0,.28)",

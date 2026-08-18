@@ -4,12 +4,20 @@ import { SeriesModel } from "@/models/Series";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { requireUser } from "@/lib/requireUser";
 import { processEpisodeTranscripts } from "@/lib/gemini";
+import { avgEpisodeMinutes } from "@/lib/gamification";
 import { VIBES } from "@/types";
 
 // Give transcript generation (Gemini upload + processing) room to run
 // before the platform's default serverless timeout kicks in. Actual
 // ceiling still depends on your hosting plan.
 export const maxDuration = 300;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function stripDrafts(doc: any) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const episodes = (doc.episodes || []).filter((e: any) => !e.isDraft);
+  return { ...doc, episodes, totalEpisodes: episodes.length };
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -23,6 +31,9 @@ export async function GET(req: NextRequest) {
     if (p.get("language") && p.get("language") !== "All") q.language = p.get("language");
     // Creator Studio lists only what this account published.
     if (p.get("creatorId")) q.creatorId = p.get("creatorId");
+    // Public profile "Credits" section — series this person is tagged
+    // on (writer, narrator, etc.) regardless of who published it.
+    if (p.get("taggedUserId")) q["credits.userId"] = p.get("taggedUserId");
     if (p.get("search")) {
       const rx = new RegExp(p.get("search")!, "i");
       q.$or = [{ title: rx }, { description: rx }, { tags: { $in: [rx] } }];
@@ -45,6 +56,17 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Drafts (whole series) are only visible to the account that owns
+    // them, or an admin — everyone else's query is scoped to published
+    // series only. Owner check is best-effort (client-supplied header,
+    // same trust model as the rest of this route), which is fine since
+    // it only ever narrows visibility, never widens it beyond what the
+    // creatorId filter above already exposes.
+    const isAdmin = !requireAdmin(req);
+    const requesterId = req.headers.get("x-user-id");
+    const isOwnerQuery = !!p.get("creatorId") && requesterId === p.get("creatorId");
+    if (!isAdmin && !isOwnerQuery) q.isDraft = { $ne: true };
+
     // Recently added, for the home screen's "Fresh drops this week".
     if (p.get("sort") === "new") {
       const data = await SeriesModel.find(q)
@@ -52,12 +74,14 @@ export async function GET(req: NextRequest) {
         .sort({ createdAt: -1 })
         .limit(parseInt(p.get("limit") || "50"))
         .lean();
-      return NextResponse.json(data);
+      const out = (isAdmin || isOwnerQuery) ? data : data.map(stripDrafts);
+      return NextResponse.json(out);
     }
 
     const limit = parseInt(p.get("limit") || "50");
     const data = await SeriesModel.find(q).select("-episodes.transcript").limit(limit).lean();
-    return NextResponse.json(data);
+    const out = (isAdmin || isOwnerQuery) ? data : data.map(stripDrafts);
+    return NextResponse.json(out);
   } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }
 }
 
@@ -81,6 +105,7 @@ export async function POST(req: NextRequest) {
     const doc = await SeriesModel.create({
       ...body,
       episodes, totalEpisodes: episodes.length,
+      avgMinutes: avgEpisodeMinutes(episodes),
       ...(creatorId ? { creatorId, isFeatured: false, isTrending: false } : {}),
     });
     return NextResponse.json(doc, { status: 201 });

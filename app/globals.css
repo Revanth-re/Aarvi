@@ -18,6 +18,11 @@
   /* Chrome heights — anything fixed to a screen edge offsets by these. */
   --topbar-h: 56px;
   --nav-h: 64px;
+  /* How far the floating bottom-nav pill sits above the viewport edge
+     on mobile, and the gap between it and the floating mini-player
+     docked above it — see .bottom-nav / .player-bar below. */
+  --nav-float-gap: 10px;
+  --player-nav-gap: 8px;
 }
 
 /* ── LAVENDER (default) ── */
@@ -39,6 +44,123 @@
   --success:#34D399; --warning:#FBBF24; --danger:#F87171; --coin:#F0B653;
   --shadow:0 2px 18px rgba(0,0,0,.4); --shadow-lg:0 10px 38px rgba(0,0,0,.5);
 }
+
+/* ── ROSE GOLD ── */
+[data-theme="rosegold-light"] {
+  --bg:#FBF3F1; --bg2:#F7E9E6; --surface:#FFFFFF; --surface2:#FDEEEA;
+  --border:#F0DAD5; --border2:#E5C2BA;
+  --accent:#C77B63; --accent-h:#B5654D; --accent2:#E8B4A6;
+  --grad:linear-gradient(135deg,#D68B76,#E8B4A6);
+  --text:#2E1D18; --text2:#6B4A40; --text3:#A6857A;
+  --success:#16A34A; --warning:#E0722B; --danger:#DC2626; --coin:#E8A33D;
+  --shadow:0 2px 14px color-mix(in srgb, var(--accent) 18%, transparent);
+  --shadow-lg:0 10px 34px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+[data-theme="rosegold-dark"] {
+  --bg:#1C1210; --bg2:#241715; --surface:#2C1B18; --surface2:#37241F;
+  --border:#ffffff12; --border2:#ffffff1F;
+  --accent:#E0A18C; --accent-h:#D68B76; --accent2:#F0C4B4;
+  --grad:linear-gradient(135deg,#D68B76,#F0C4B4);
+  --text:#FBEDE8; --text2:#D4B2A6; --text3:#9C7A6E;
+  --success:#34D399; --warning:#FBBF24; --danger:#F87171; --coin:#F0B653;
+  --shadow:0 2px 18px rgba(0,0,0,.4); --shadow-lg:0 10px 38px rgba(0,0,0,.5);
+}
+
+/* ── MINT ── */
+[data-theme="mint-light"] {
+  --bg:#F1FBF6; --bg2:#E5F7EE; --surface:#FFFFFF; --surface2:#EAF9F1;
+  --border:#D8F0E3; --border2:#C3E8D6;
+  --accent:#17A673; --accent-h:#0F8F62; --accent2:#7FD9B6;
+  --grad:linear-gradient(135deg,#1FBE86,#7FE0BE);
+  --text:#14251D; --text2:#3E5B4D; --text3:#7E9C8E;
+  --success:#16A34A; --warning:#E0722B; --danger:#DC2626; --coin:#E8A33D;
+  --shadow:0 2px 14px color-mix(in srgb, var(--accent) 18%, transparent);
+  --shadow-lg:0 10px 34px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+[data-theme="mint-dark"] {
+  --bg:#0E1815; --bg2:#12211C; --surface:#17281F; --surface2:#1E332A;
+  --border:#ffffff12; --border2:#ffffff1F;
+  --accent:#34D399; --accent-h:#1FBE86; --accent2:#86EFC4;
+  --grad:linear-gradient(135deg,#1FBE86,#86EFC4);
+  --text:#EAFBF3; --text2:#A9D6C2; --text3:#6E9484;
+  --success:#34D399; --warning:#FBBF24; --danger:#F87171; --coin:#F0B653;
+  --shadow:0 2px 18px rgba(0,0,0,.4); --shadow-lg:0 10px 38px rgba(0,0,0,.5);
+}
+
+/* ── CYBER BLUE ── */
+[data-theme="cyberblue-light"] {
+  --bg:#F1F7FC; --bg2:#E4F0FA; --surface:#FFFFFF; --surface2:#E9F4FC;
+  --border:#D6E8F7; --border2:#BEDCF4;
+  --accent:#1E88E5; --accent-h:#1669B4; --accent2:#6FC3F7;
+  --grad:linear-gradient(135deg,#1E88E5,#41D6D6);
+  --text:#101B26; --text2:#37505F; --text3:#7893A3;
+  --success:#16A34A; --warning:#E0722B; --danger:#DC2626; --coin:#E8A33D;
+  --shadow:0 2px 14px color-mix(in srgb, var(--accent) 18%, transparent);
+  --shadow-lg:0 10px 34px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+[data-theme="cyberblue-dark"] {
+  --bg:#0A1420; --bg2:#0F1C2C; --surface:#142438; --surface2:#1B3049;
+  --border:#ffffff12; --border2:#ffffff1F;
+  --accent:#4FC3F7; --accent-h:#29B6F6; --accent2:#7FE7E1;
+  --grad:linear-gradient(135deg,#2FA8E8,#5CE1D6);
+  --text:#E7F5FC; --text2:#A9CBDE; --text3:#6E8FA3;
+  --success:#34D399; --warning:#FBBF24; --danger:#F87171; --coin:#F0B653;
+  --shadow:0 2px 18px rgba(0,0,0,.4); --shadow-lg:0 10px 38px rgba(0,0,0,.5);
+}
+
+/* ── PEACH ── */
+[data-theme="peach-light"] {
+  --bg:#FFF6EF; --bg2:#FFEBDC; --surface:#FFFFFF; --surface2:#FFF0E4;
+  --border:#FBDCC3; --border2:#F7CAA6;
+  --accent:#F0834D; --accent-h:#DC6C36; --accent2:#F7B183;
+  --grad:linear-gradient(135deg,#F5934F,#FBBE85);
+  --text:#2E1B10; --text2:#6B4530; --text3:#A67F5F;
+  --success:#16A34A; --warning:#E0722B; --danger:#DC2626; --coin:#E8A33D;
+  --shadow:0 2px 14px color-mix(in srgb, var(--accent) 18%, transparent);
+  --shadow-lg:0 10px 34px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+[data-theme="peach-dark"] {
+  --bg:#1E140D; --bg2:#271A10; --surface:#2F2013; --surface2:#3B2917;
+  --border:#ffffff12; --border2:#ffffff1F;
+  --accent:#F5975C; --accent-h:#F0834D; --accent2:#FBC79A;
+  --grad:linear-gradient(135deg,#F5975C,#FBC79A);
+  --text:#FDEFE3; --text2:#DDB491; --text3:#A68362;
+  --success:#34D399; --warning:#FBBF24; --danger:#F87171; --coin:#F0B653;
+  --shadow:0 2px 18px rgba(0,0,0,.4); --shadow-lg:0 10px 38px rgba(0,0,0,.5);
+}
+
+/* ── MIDNIGHT ── */
+[data-theme="midnight-light"] {
+  --bg:#EEF0FA; --bg2:#E1E5F7; --surface:#FFFFFF; --surface2:#E9ECFA;
+  --border:#D6DBF2; --border2:#C2C9EC;
+  --accent:#3944A8; --accent-h:#2C3689; --accent2:#7C87D9;
+  --grad:linear-gradient(135deg,#3944A8,#6C77D6);
+  --text:#10132B; --text2:#363C6B; --text3:#7378A3;
+  --success:#16A34A; --warning:#E0722B; --danger:#DC2626; --coin:#E8A33D;
+  --shadow:0 2px 14px color-mix(in srgb, var(--accent) 18%, transparent);
+  --shadow-lg:0 10px 34px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+[data-theme="midnight-dark"] {
+  --bg:#05060F; --bg2:#090B18; --surface:#0E1122; --surface2:#151A30;
+  --border:#ffffff12; --border2:#ffffff1F;
+  --accent:#6C77D6; --accent-h:#5359C2; --accent2:#A6ADEE;
+  --grad:linear-gradient(135deg,#4A54C4,#8A93EA);
+  --text:#EAEBFB; --text2:#B6BAE8; --text3:#6E739E;
+  --success:#34D399; --warning:#FBBF24; --danger:#F87171; --coin:#F0B653;
+  --shadow:0 2px 18px rgba(0,0,0,.4); --shadow-lg:0 10px 38px rgba(0,0,0,.5);
+}
+
+/* ── Font styles ──
+   Applied as data-font="<key>" on <html>, independent of data-theme.
+   Google Fonts loaded once in app/layout.tsx. */
+:root, [data-font="sora"]      { --ff-sans: 'Sora', system-ui, -apple-system, sans-serif; }
+[data-font="neo"]              { --ff-sans: 'Space Grotesk', system-ui, -apple-system, sans-serif; }
+[data-font="slab"]             { --ff-sans: 'Roboto Slab', Georgia, serif; }
+[data-font="rounded"]          { --ff-sans: 'Baloo 2', system-ui, -apple-system, sans-serif; }
+[data-font="serif"]            { --ff-sans: 'Lora', Georgia, serif; }
+[data-font="playful"]          { --ff-sans: 'Fredoka', system-ui, -apple-system, sans-serif; }
+[data-font="handwritten"]      { --ff-sans: 'Caveat', cursive, system-ui, sans-serif; }
+[data-font="retro"]            { --ff-sans: 'Righteous', system-ui, -apple-system, sans-serif; }
 
 @layer base {
   html { background-color: var(--bg); }
@@ -78,19 +200,88 @@
   backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
 }
 
+/* ── Mobile dock: wraps Player + BottomNav (see ClientRoot.tsx) ──
+   A single fixed-position flex column stacking the two floating pills
+   with a real `gap`, instead of each one independently computing a
+   `bottom` offset that has to exactly match the other's height — that
+   arithmetic drifted out of sync once before and caused an overlap.
+   `display:contents` by default (mobile-only behavior; desktop's
+   sidebar + floating-player layout further down needs each child
+   independently fixed-positioned, so the dock gets out of the way
+   entirely above 1024px). */
+.dock { display: contents; }
+@media (max-width: 1023px) {
+  .dock {
+    display: flex; flex-direction: column; align-items: center;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 120;
+    gap: var(--player-nav-gap);
+    padding-bottom: calc(var(--nav-float-gap) + env(safe-area-inset-bottom, 0px));
+    pointer-events: none; /* only the two pills themselves are interactive */
+  }
+  .dock > * { pointer-events: auto; }
+  /* Scoped this way (not just `.bottom-nav`/`.player-bar` alone) so it
+     reliably outranks their own unconditional `position: fixed` base
+     rules regardless of where those happen to sit in the file — relying
+     on source order for a same-specificity override is exactly the
+     kind of thing that's easy to accidentally break later.
+     .player-bar is reached as a descendant, not a direct child: Player
+     renders more than just the mini bar (a hidden <audio>, the
+     full-screen expanded view, the comment composer sheet) inside one
+     .player-root wrapper, so .player-root — not .player-bar — is
+     .dock's actual flex item. */
+  .dock > .bottom-nav, .dock .player-bar { position: static; left: auto; right: auto; bottom: auto; transform: none; }
+  /* .player-root has no size of its own otherwise (its only *in-flow*
+     content is the invisible <audio> tag — the expanded view and
+     composer sheet are position:fixed, so they don't count). Giving it
+     the dock's full width and centering .player-bar inside is what
+     lets .player-bar's own `width: calc(100% - 24px)` resolve sanely,
+     replacing the old left:50%/translateX(-50%) centering trick that
+     only worked while it was independently fixed-positioned. */
+  .player-root { width: 100%; display: flex; justify-content: center; }
+}
+
 .bottom-nav {
   position: fixed; bottom: 0; z-index: 120;
   width: 100%; max-width: 480px; left: 50%; transform: translateX(-50%);
-  border-top: 1px solid var(--border);
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .bottom-nav-inner { height: var(--nav-h); display: flex; align-items: center; }
-/* Settings → Tab bar style */
+
+/* Edge-to-edge default — the desktop sidebar (≥1024px, further down
+   this file) reuses this. The mobile query below layers a floating
+   rounded/glass card on top of it. */
 .bottom-nav[data-style="transparent"] {
   background: color-mix(in srgb, var(--bg2) 82%, transparent);
   backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
 }
 .bottom-nav[data-style="normal"] { background: var(--bg2); }
+
+/* Floating rounded/glass container — phones and tablets only; the
+   ≥1024px sidebar block further down resets this back to edge-to-edge. */
+@media (max-width: 1023px) {
+  .bottom-nav {
+    width: calc(100% - 24px); max-width: 456px;
+    border-radius: 26px; overflow: hidden;
+    box-shadow: var(--shadow-lg);
+  }
+  .bottom-nav[data-style="transparent"] {
+    /* Blends the accent colour directly into the fill (not just a
+       faint corner gradient) so this reads unmistakably violet rather
+       than a pale, near-white haze — and at 90% opacity so only a
+       little of whatever's behind it shows through, per "minimal"
+       transparency rather than a deep glass effect. --bg2 alone was
+       too close in tone to the very pale page background behind it
+       (both near-white in light mode), which is why it read as plain
+       white/grey instead of violet. */
+    background: color-mix(in srgb, color-mix(in srgb, var(--bg2) 80%, var(--accent) 20%) 90%, transparent);
+    backdrop-filter: blur(18px) saturate(180%); -webkit-backdrop-filter: blur(18px) saturate(180%);
+    border: 1px solid color-mix(in srgb, var(--accent2) 40%, var(--border2));
+  }
+  .bottom-nav[data-style="normal"] {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+  }
+}
 
 .nav-item {
   flex: 1; display: flex; flex-direction: column; align-items: center;
@@ -101,9 +292,13 @@
 .nav-icon-wrap {
   width: 34px; height: 26px; border-radius: var(--r-pill);
   display: flex; align-items: center; justify-content: center;
-  transition: background .18s;
+  transition: background .18s, transform .18s;
 }
-.nav-item[data-active="true"] .nav-icon-wrap { background: var(--accent); color: #fff; }
+.nav-item[data-active="true"] .nav-icon-wrap {
+  background: var(--grad); color: #fff;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 40%, transparent);
+  transform: translateY(-1px);
+}
 .nav-label { font-size: 10px; }
 
 /* ── Primitives ── */
@@ -141,9 +336,25 @@ textarea.inp { border-radius: var(--r); resize: vertical; line-height: 1.6; }
 .chip[data-active="true"] { background: var(--grad); color: #fff; border-color: transparent; }
 
 .player-bar {
-  position: fixed; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
+  position: fixed;
+  /* Edge-to-edge desktop default (sits directly on the tab bar, which
+     is edge-to-edge above 1024px too — see the sidebar block further
+     down). Desktop's own override further down replaces this; mobile
+     gets its position from the .dock flex wrapper instead (see above)
+     so it can never drift out of sync with the nav's height again. */
+  bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
   left: 50%; transform: translateX(-50%);
   width: 100%; max-width: 480px; z-index: 110;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+}
+@media (max-width: 1023px) {
+  .player-bar {
+    width: calc(100% - 24px); max-width: 456px;
+    /* Same radius as .bottom-nav — they're meant to read as a matching
+       pair of floating pills. */
+    border-radius: 26px; overflow: hidden;
+  }
 }
 
 .pill-badge {
@@ -270,7 +481,7 @@ textarea.inp { border-radius: var(--r); resize: vertical; line-height: 1.6; }
     transform: none;
     width: calc(100% - var(--sidebar-w) - (var(--content-gutter) * 2));
     max-width: 1600px;
-    bottom: 24px; border-radius: var(--r-lg);
+    bottom: 24px; border-radius: var(--r-lg); overflow: hidden;
   }
 
   /* No bottom nav to clear any more — just the floating player. */

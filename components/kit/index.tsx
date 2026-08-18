@@ -75,6 +75,11 @@ export function ShowCard({ series, width = 132 }: { series: Series; width?: numb
       <div className="truncate" style={{ fontSize: 13, fontWeight: 700, marginTop: 8, color: "var(--text)" }}>
         {series.title}
       </div>
+      {series.narrator && (
+        <div className="truncate" style={{ fontSize: 10.5, color: "var(--text3)", marginTop: 1 }}>
+          {series.narrator}
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11.5, color: "var(--text3)", marginTop: 2 }}>
         <Star size={11} fill="var(--coin)" color="var(--coin)"/>
         {series.rating?.toFixed(1) ?? "—"} · {formatCount(series.totalPlays ?? 0)}

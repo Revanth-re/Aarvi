@@ -1,13 +1,17 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Play, Heart, Lock, Star, MessageCircle, Share2 } from "lucide-react";
+import { ArrowLeft, Play, Heart, Lock, Star, MessageCircle, Share2, Mic2 } from "lucide-react";
 import { Series, Episode, Thought } from "@/types";
 import { useApp, usePlayer, useToast } from "@/store";
+import { creatorFetch } from "@/lib/creatorFetch";
 import { formatCount, formatTime, UNLOCK_EPISODE_COST } from "@/lib/gamification";
 import { Screen, Cover, SectionHeader, EmptyState } from "@/components/kit";
 import TopBar from "@/components/shell/TopBar";
 import ThoughtCard from "./ThoughtCard";
+import RatingWidget from "./RatingWidget";
+import Avatar from "@/components/ui/Avatar";
 
 export default function SeriesDetail({ seriesId }: { seriesId: string }) {
   const router = useRouter();
@@ -16,6 +20,7 @@ export default function SeriesDetail({ seriesId }: { seriesId: string }) {
   const showToast = useToast(s => s.show);
 
   const [series, setSeries] = useState<Series | null>(null);
+  const [creator, setCreator] = useState<{ _id: string; name: string; handle: string; image: string } | null>(null);
   const [thoughts, setThoughts] = useState<Thought[]>([]);
   const [loading, setLoading] = useState(true);
   const [unlocking, setUnlocking] = useState("");
@@ -24,13 +29,18 @@ export default function SeriesDetail({ seriesId }: { seriesId: string }) {
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      fetch(`/api/series/${seriesId}`).then(r => r.json()),
+      creatorFetch(`/api/series/${seriesId}`).then(r => r.json()),
       fetch(`/api/thoughts?seriesId=${seriesId}&limit=10${user ? `&userId=${user._id}` : ""}`).then(r => r.json()),
     ])
       .then(([s, t]) => {
         if (cancelled) return;
         if (s?._id) setSeries(s);
         if (Array.isArray(t)) setThoughts(t);
+        if (s?.creatorId) {
+          fetch(`/api/users/${s.creatorId}`).then(r => r.json())
+            .then(u => { if (!cancelled && !u.error) setCreator(u); })
+            .catch(() => {});
+        }
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -104,6 +114,10 @@ export default function SeriesDetail({ seriesId }: { seriesId: string }) {
   }
 
   const episodes = [...(series.episodes ?? [])].sort((a, b) => a.episodeNumber - b.episodeNumber);
+  // The narrator credit, if the creator tagged one — makes the name
+  // tappable through to their profile. Falls back to the plain
+  // `narrator` text field (no linked account) otherwise.
+  const narratorCredit = series.credits?.find(c => /narrat|voice/i.test(c.role));
 
   return (
     <>
@@ -120,9 +134,19 @@ export default function SeriesDetail({ seriesId }: { seriesId: string }) {
             <h1 style={{ fontFamily: "var(--ff-display)", fontSize: 21, fontWeight: 800, margin: "0 0 4px", color: "var(--text)" }}>
               {series.title}
             </h1>
-            <p style={{ fontSize: 12, color: "var(--text3)", margin: "0 0 8px" }}>
+            <p style={{ fontSize: 12, color: "var(--text3)", margin: "0 0 4px" }}>
               {series.genre} · {series.language} · {episodes.length} eps
             </p>
+            {(narratorCredit || series.narrator) && (
+              <p style={{ fontSize: 12, color: "var(--text2)", margin: "0 0 4px", display: "flex", alignItems: "center", gap: 4 }}>
+                <Mic2 size={12} color="var(--text3)"/>
+                {narratorCredit ? (
+                  <>Narrated by <Link href={`/u/${narratorCredit.userId}`} style={{ color: "var(--accent)", fontWeight: 600, textDecoration: "none" }}>{narratorCredit.name}</Link></>
+                ) : (
+                  <>Narrated by {series.narrator}</>
+                )}
+              </p>
+            )}
             <p style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--text3)", margin: "0 0 10px" }}>
               <Star size={12} fill="var(--coin)" color="var(--coin)"/>
               {series.rating?.toFixed(1)} · {formatCount(series.totalPlays ?? 0)} plays
@@ -140,6 +164,41 @@ export default function SeriesDetail({ seriesId }: { seriesId: string }) {
           <p style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.65, margin: 0 }}>{series.description}</p>
         )}
 
+        {creator && (
+          <Link href={`/u/${creator._id}`} style={{
+            display: "flex", alignItems: "center", gap: 10, textDecoration: "none",
+            padding: "10px 12px", borderRadius: 14, background: "var(--surface2)",
+          }}>
+            <Avatar name={creator.name} image={creator.image} size={34}/>
+            <span style={{ minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 10.5, color: "var(--text3)", lineHeight: 1.2 }}>Published by</span>
+              <span className="truncate" style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--text)", lineHeight: 1.3 }}>
+                {creator.name}{creator.handle && ` · @${creator.handle}`}
+              </span>
+            </span>
+          </Link>
+        )}
+
+        {!!series.credits?.length && (
+          <section>
+            <SectionHeader title="Credits"/>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {series.credits.map((c, i) => (
+                <Link key={`${c.userId}-${i}`} href={`/u/${c.userId}`} style={{
+                  display: "flex", alignItems: "center", gap: 7, textDecoration: "none",
+                  padding: "6px 10px 6px 6px", borderRadius: "var(--r-pill)", background: "var(--surface2)",
+                }}>
+                  <Avatar name={c.name} image={c.image} size={22}/>
+                  <span>
+                    <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text)", lineHeight: 1.2 }}>{c.name}</span>
+                    <span style={{ display: "block", fontSize: 10, color: "var(--text3)", lineHeight: 1.2 }}>{c.role}</span>
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
         <section>
           <SectionHeader title={`${episodes.length} episodes`}/>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -151,8 +210,19 @@ export default function SeriesDetail({ seriesId }: { seriesId: string }) {
                     {ep.episodeNumber}
                   </span>
                   <span style={{ flex: 1, minWidth: 0 }}>
-                    <span className="truncate" style={{ display: "block", fontSize: 13.5, fontWeight: 700, color: "var(--text)" }}>
-                      {ep.title}
+                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span className="truncate" style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text)" }}>
+                        {ep.title}
+                      </span>
+                      {ep.isDraft && (
+                        <span style={{
+                          fontSize: 9, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase",
+                          padding: "2px 6px", borderRadius: "var(--r-pill)", flex: "none",
+                          background: "color-mix(in srgb, var(--warning) 16%, transparent)", color: "var(--warning)",
+                        }}>
+                          Draft
+                        </span>
+                      )}
                     </span>
                     <span style={{ display: "block", fontSize: 11.5, color: "var(--text3)" }}>
                       {formatTime(ep.duration || 0)}{!ep.audioUrl && " · no audio yet"}
@@ -177,6 +247,11 @@ export default function SeriesDetail({ seriesId }: { seriesId: string }) {
               );
             })}
           </div>
+        </section>
+
+        <section>
+          <SectionHeader title="Ratings & reviews"/>
+          <RatingWidget seriesId={series._id}/>
         </section>
 
         <section>

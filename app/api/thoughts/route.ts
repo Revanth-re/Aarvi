@@ -3,7 +3,7 @@ import { connectDB } from "@/lib/mongodb";
 import { ThoughtModel } from "@/models/Thought";
 import { UserModel } from "@/models/User";
 import { SeriesModel } from "@/models/Series";
-import { NotificationModel } from "@/models/Notification";
+import { notifyAndPush } from "@/lib/notify";
 import { idOf, iso, publicUser } from "@/lib/serialize";
 import { Thought } from "@/types";
 
@@ -70,12 +70,38 @@ export async function GET(req: NextRequest) {
     if (p.get("episodeId")) q.episodeId = p.get("episodeId");
     if (p.get("seriesId"))  q.seriesId  = p.get("seriesId");
 
+    // Never surface anything an admin has moderated away here — the
+    // (admin-only) moderation log is the one place that still can.
+    q.hiddenByModeration = { $ne: true };
+
+    let followingIds: string[] = [];
+    if (me) {
+      const meDoc = await UserModel.findById(me).select("following").lean<any>();
+      followingIds = meDoc?.following ?? [];
+    }
+
     if (p.get("authorId")) {
       q.userId = p.get("authorId");
-      // Your own private thoughts are visible to you; nobody else's are.
-      if (p.get("authorId") !== me) q.isPublic = true;
+      if (p.get("authorId") !== me) {
+        // Your own private thoughts are visible to you; nobody else's
+        // are. "followers"-tier ones need the viewer to actually
+        // follow this author.
+        const followsAuthor = followingIds.includes(p.get("authorId")!);
+        q.$or = [
+          { visibility: followsAuthor ? { $ne: "private" } : "public" },
+          { visibility: { $exists: false }, isPublic: true }, // legacy rows predating the visibility field
+        ];
+      }
     } else {
-      q.isPublic = true;
+      // Mixed-author feed (an episode, a series, or the global list):
+      // public to everyone, "followers"-tier only from people you
+      // follow, always your own, plus legacy rows.
+      q.$or = [
+        { visibility: "public" },
+        { visibility: "followers", userId: { $in: [...followingIds, me].filter(Boolean) } },
+        ...(me ? [{ userId: me }] : []),
+        { visibility: { $exists: false }, isPublic: true },
+      ];
     }
 
     // A reply thread reads chronologically, oldest first. Inside an
@@ -93,11 +119,11 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/thoughts — leave a thought at a moment.
-// Body: { userId, seriesId, episodeId, atSec, text, parentId? }
+// Body: { userId, seriesId, episodeId, atSec, text, parentId?, visibility? }
 export async function POST(req: NextRequest) {
   try {
     await connectDB();
-    const { userId, seriesId, episodeId, atSec, text, parentId = null } = await req.json();
+    const { userId, seriesId, episodeId, atSec, text, parentId = null, visibility } = await req.json();
 
     if (!userId || !seriesId || !episodeId || typeof atSec !== "number") {
       return NextResponse.json(
@@ -110,22 +136,28 @@ export async function POST(req: NextRequest) {
     const user = await UserModel.findById(userId).select("name settings").lean<any>();
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
+    // Quick preset (see types/index.ts Visibility) overrides the
+    // account default when the composer's picker is used; otherwise
+    // fall back to the existing publicThoughts setting.
+    const accountDefault = user.settings?.privacy?.publicThoughts !== false ? "followers" : "private";
+    const v = ["public", "followers", "private"].includes(visibility) ? visibility : accountDefault;
+
     const doc = await ThoughtModel.create({
       userId, seriesId, episodeId,
       atSec: Math.max(0, Math.floor(atSec)),
       text: body.slice(0, 500),
       parentId,
-      // Snapshot the privacy setting at post time, so flipping the
-      // toggle later doesn't retroactively expose old thoughts.
-      isPublic: user.settings?.privacy?.publicThoughts !== false,
+      visibility: v,
+      // Kept in sync with visibility for any code still reading the
+      // older isPublic field.
+      isPublic: v !== "private",
     });
 
     // Notify the parent author on a reply (never yourself).
     if (parentId) {
       const parent = await ThoughtModel.findById(parentId).select("userId").lean<any>();
       if (parent && parent.userId !== userId) {
-        await NotificationModel.create({
-          userId: parent.userId,
+        await notifyAndPush(parent.userId, {
           category: "social",
           type: "thought_reply",
           title: `${user.name || "Someone"} replied to your thought`,
@@ -133,6 +165,8 @@ export async function POST(req: NextRequest) {
           link: `/series/${seriesId}`,
           fromUserId: userId,
           fromUserName: user.name,
+          toggle: "thoughtReplies",
+          pushUrl: `/series/${seriesId}`,
         }).catch(() => {});
         await ThoughtModel.findByIdAndUpdate(parentId, { $inc: { replyCount: 1 } });
       }

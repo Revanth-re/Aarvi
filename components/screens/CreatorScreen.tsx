@@ -1,23 +1,29 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Mic, Users, Headphones, TrendingUp, Plus, Clapperboard, Pencil } from "lucide-react";
+import { Mic, Users, Headphones, TrendingUp, Plus, Clapperboard, Pencil, Play } from "lucide-react";
 import { Series } from "@/types";
-import { useApp } from "@/store";
+import { useApp, useToast } from "@/store";
+import { creatorFetch } from "@/lib/creatorFetch";
 import { formatCount } from "@/lib/gamification";
 import { Screen, SectionHeader, Cover, EmptyState } from "@/components/kit";
 import TopBar from "@/components/shell/TopBar";
 
 export default function CreatorScreen() {
   const user = useApp(s => s.user);
+  const showToast = useToast(s => s.show);
   const [series, setSeries] = useState<Series[]>([]);
   const [followers, setFollowers] = useState(0);
+  const [publishing, setPublishing] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
 
-    fetch(`/api/series?creatorId=${user._id}&limit=50`)
+    // creatorFetch attaches x-user-id, which is what tells the server
+    // this is the owner looking at their own list — otherwise draft
+    // series would be filtered out just like they are everywhere else.
+    creatorFetch(`/api/series?creatorId=${user._id}&limit=50`)
       .then(r => r.json())
       .then(d => { if (!cancelled && Array.isArray(d)) setSeries(d); })
       .catch(() => {});
@@ -29,6 +35,24 @@ export default function CreatorScreen() {
 
     return () => { cancelled = true; };
   }, [user?._id]);
+
+  const publishSeries = async (id: string) => {
+    setPublishing(p => ({ ...p, [id]: true }));
+    try {
+      const r = await creatorFetch(`/api/series/${id}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isDraft: false }),
+      });
+      const d = await r.json();
+      if (!r.ok || d.error) { showToast(d.error || "Couldn't publish", "error"); return; }
+      setSeries(s => s.map(x => x._id === id ? { ...x, isDraft: false } : x));
+      showToast("Series published", "success");
+    } catch {
+      showToast("Network error", "error");
+    } finally {
+      setPublishing(p => ({ ...p, [id]: false }));
+    }
+  };
 
   if (!user) {
     return (
@@ -79,24 +103,38 @@ export default function CreatorScreen() {
           <SectionHeader title="Your series"/>
           {series.length ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {series.map(s => (
-                <div key={s._id} className="card" style={{ display: "flex", alignItems: "center", gap: 12, padding: 10 }}>
-                  <Link href={`/series/${s._id}`} style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, textDecoration: "none" }}>
-                    <Cover id={s._id} url={s.coverImage} size={52} radius={12}/>
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      <span className="truncate" style={{ display: "block", fontSize: 13.5, fontWeight: 700, color: "var(--text)" }}>
-                        {s.title}
+              {series.map(s => {
+                const eps = s.episodes || [];
+                const draftEps = eps.filter(e => e.isDraft).length;
+                return (
+                  <div key={s._id} className="card" style={{ display: "flex", alignItems: "center", gap: 12, padding: 10 }}>
+                    <Link href={`/series/${s._id}`} style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, textDecoration: "none" }}>
+                      <Cover id={s._id} url={s.coverImage} size={52} radius={12}/>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span className="truncate" style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text)" }}>
+                            {s.title}
+                          </span>
+                          {s.isDraft && <DraftBadge/>}
+                        </span>
+                        <span className="truncate" style={{ display: "block", fontSize: 11.5, color: "var(--text3)" }}>
+                          {formatCount(s.totalPlays ?? 0)} plays · {eps.length} episode{eps.length === 1 ? "" : "s"}
+                          {!s.isDraft && draftEps > 0 && ` · ${draftEps} draft`}
+                        </span>
                       </span>
-                      <span className="truncate" style={{ display: "block", fontSize: 11.5, color: "var(--text3)" }}>
-                        {formatCount(s.totalPlays ?? 0)} plays · {s.totalEpisodes ?? s.episodes?.length ?? 0} episodes
-                      </span>
-                    </span>
-                  </Link>
-                  <Link href={`/creator/series/${s._id}/edit`} className="btn btn-ghost btn-xs" style={{ textDecoration: "none" }}>
-                    <Pencil size={12}/>Edit
-                  </Link>
-                </div>
-              ))}
+                    </Link>
+                    {s.isDraft && (
+                      <button onClick={() => publishSeries(s._id)} disabled={publishing[s._id]}
+                        className="btn btn-soft btn-xs" style={{ flex: "none" }}>
+                        <Play size={12}/>{publishing[s._id] ? "…" : "Publish"}
+                      </button>
+                    )}
+                    <Link href={`/creator/series/${s._id}/edit`} className="btn btn-ghost btn-xs" style={{ textDecoration: "none", flex: "none" }}>
+                      <Pencil size={12}/>Edit
+                    </Link>
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <EmptyState
@@ -109,11 +147,24 @@ export default function CreatorScreen() {
         </section>
 
         <p style={{ fontSize: 11.5, color: "var(--text3)", lineHeight: 1.6 }}>
-          Recording and AI voice tools aren&apos;t built — upload finished audio
-          files and Creator Studio handles the rest (cover art, episodes, Shorts).
+          Publish with an uploaded audio file or generated voice narration, save
+          episodes as drafts while you work, and publish them one at a time
+          whenever they&apos;re ready.
         </p>
       </Screen>
     </>
+  );
+}
+
+function DraftBadge() {
+  return (
+    <span style={{
+      fontSize: 9.5, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase",
+      padding: "2px 6px", borderRadius: "var(--r-pill)", flex: "none",
+      background: "color-mix(in srgb, var(--warning) 16%, transparent)", color: "var(--warning)",
+    }}>
+      Draft
+    </span>
   );
 }
 

@@ -4,12 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Play, Pause, SkipBack, SkipForward, X, ChevronUp, ChevronDown,
-  RotateCcw, RotateCw, Moon, MessageCircle,
+  RotateCcw, RotateCw, Moon, MessageCircle, Heart,
 } from "lucide-react";
 import { usePlayer, useApp, useToast } from "@/store";
 import { formatTime } from "@/lib/gamification";
+import { Thought } from "@/types";
 import { Cover } from "@/components/kit";
 import ThoughtComposer from "@/components/screens/ThoughtComposer";
+import ThoughtCard from "@/components/screens/ThoughtCard";
 
 const RATES = [0.75, 1, 1.25, 1.5, 2];
 const SLEEP_OPTIONS = [
@@ -38,6 +40,23 @@ export default function Player() {
   const [composerOpen, setComposerOpen] = useState(false);
   const [sleepLeft, setSleepLeft] = useState(0);
   const progressRef = useRef(progress);
+
+  // ── Episode likes (separate from the series-level Save/Heart on
+  //    SeriesDetail — this one is per-episode). Keyed by episodeId
+  //    rather than reset-on-effect-entry, so switching episodes can't
+  //    show a stale like/comment count for a beat before the new
+  //    fetch resolves. ──
+  const [likeState, setLikeState] = useState<{ episodeId: string; liked: boolean; likeCount: number } | null>(null);
+
+  // ── Comments for the currently open episode — the same Thoughts a
+  //    listener leaves at a moment, just listed here so they're visible
+  //    "when viewing that episode" without leaving the player. ──
+  const [commentsState, setCommentsState] = useState<{ episodeId: string; comments: Thought[] } | null>(null);
+
+  const liked = !!likeState && likeState.episodeId === ep?._id ? likeState.liked : false;
+  const likeCount = !!likeState && likeState.episodeId === ep?._id ? likeState.likeCount : 0;
+  const comments = !!commentsState && commentsState.episodeId === ep?._id ? commentsState.comments : [];
+  const commentsLoaded = !!commentsState && commentsState.episodeId === ep?._id;
 
   useEffect(() => { progressRef.current = progress; }, [progress]);
 
@@ -110,7 +129,45 @@ export default function Player() {
     return () => clearInterval(id);
   }, [sleepMinutes, fadeOnSleep, setPlaying, setSleepMinutes]);
 
-  // ── Save position for "Continue listening" ──
+  // ── Load like state + comments once the full player is opened for
+  //    this episode — no need while it's just the mini bar. ──
+  useEffect(() => {
+    if (!expanded || !ep || !series) return;
+    let cancelled = false;
+    const episodeId = ep._id, seriesId = series._id;
+
+    fetch(`/api/episodes/${episodeId}/like?seriesId=${seriesId}${user ? `&userId=${user._id}` : ""}`)
+      .then(r => r.json())
+      .then(d => { if (!cancelled && !d.error) setLikeState({ episodeId, liked: d.liked, likeCount: d.likeCount }); })
+      .catch(() => {});
+
+    fetch(`/api/thoughts?episodeId=${episodeId}&seriesId=${seriesId}&limit=20${user ? `&userId=${user._id}` : ""}`)
+      .then(r => r.json())
+      .then(d => { if (!cancelled && Array.isArray(d)) setCommentsState({ episodeId, comments: d }); })
+      .catch(() => {});
+
+    return () => { cancelled = true; };
+  }, [expanded, ep?._id, series?._id, user?._id]);
+
+  const toggleEpisodeLike = async () => {
+    if (!user) { showToast("Log in to like episodes", "info"); return; }
+    if (!ep || !series) return;
+    const episodeId = ep._id;
+    const wasLiked = liked, wasCount = likeCount;
+    setLikeState({ episodeId, liked: !liked, likeCount: likeCount + (liked ? -1 : 1) });
+    try {
+      const r = await fetch(`/api/episodes/${episodeId}/like`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user._id, seriesId: series._id }),
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setLikeState({ episodeId, liked: d.liked, likeCount: d.likeCount });
+    } catch {
+      setLikeState({ episodeId, liked: wasLiked, likeCount: wasCount });
+      showToast("Couldn't save that like", "error");
+    }
+  };
   useEffect(() => {
     if (!ep || !series || !user || !playing) return;
     const save = () => {
@@ -144,7 +201,7 @@ export default function Player() {
   const noAudio = !ep.audioUrl;
 
   return (
-    <>
+    <div className="player-root">
       <audio
         ref={audio}
         onTimeUpdate={() => audio.current && setProgress(audio.current.currentTime)}
@@ -154,11 +211,8 @@ export default function Player() {
         preload="metadata"
       />
 
-      {/* ── Mini bar, sits directly above the tab bar ── */}
-      <div className="player-bar" style={{
-        background: "var(--surface)", borderTop: "1px solid var(--border)",
-        boxShadow: "0 -4px 24px rgba(0,0,0,.10)",
-      }}>
+      {/* ── Mini bar, floats directly above the tab bar ── */}
+      <div className="player-bar" style={{ background: "var(--bg2)" }}>
         <div className="progress-track" style={{ height: 2, borderRadius: 0 }}>
           <div className="progress-fill" style={{ width: `${pct}%`, borderRadius: 0 }}/>
         </div>
@@ -278,10 +332,16 @@ export default function Player() {
               {rate}×
             </button>
 
+            <button onClick={toggleEpisodeLike} aria-label={liked ? "Unlike this episode" : "Like this episode"}
+              className="btn btn-soft btn-sm" style={{ color: liked ? "var(--danger)" : undefined }}>
+              <Heart size={14} fill={liked ? "var(--danger)" : "none"}/>
+              {likeCount > 0 ? likeCount.toLocaleString() : "Like"}
+            </button>
+
             {/* Leaving a thought is a first-class player action — that's
                 what makes them timestamped rather than generic comments. */}
             <button onClick={() => setComposerOpen(true)} className="btn btn-soft btn-sm">
-              <MessageCircle size={14}/> Leave a thought at {formatTime(progress)}
+              <MessageCircle size={14}/> Comment
             </button>
           </div>
 
@@ -291,6 +351,29 @@ export default function Player() {
               Admin → Audio Series and playback will work.
             </p>
           )}
+
+          {/* Comments belong to this specific episode — a different
+              list every time a new one is opened (see the load effect
+              above), not a series-wide feed. */}
+          <div style={{ marginTop: 28 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>
+              Comments {comments.length > 0 && `· ${comments.length}`}
+            </div>
+            {!commentsLoaded ? (
+              <div className="skeleton" style={{ height: 60, borderRadius: 14 }}/>
+            ) : comments.length ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {comments.map(c => (
+                  <ThoughtCard key={c._id} thought={c}
+                    onDeleted={id => ep && setCommentsState(s => s && ({ episodeId: ep._id, comments: s.comments.filter(x => x._id !== id) }))}/>
+                ))}
+              </div>
+            ) : (
+              <p style={{ fontSize: 12.5, color: "var(--text3)", margin: 0 }}>
+                No comments yet on this episode — be first.
+              </p>
+            )}
+          </div>
 
           <Link href={`/series/${series._id}`} onClick={() => setExpanded(false)}
             style={{ fontSize: 12.5, color: "var(--accent)", textDecoration: "none", marginTop: 20 }}>
@@ -305,8 +388,16 @@ export default function Player() {
         seriesId={series._id}
         episodeId={ep._id}
         atSec={Math.floor(progress)}
+        onPosted={() => {
+          if (!ep || !series) return;
+          const episodeId = ep._id, seriesId = series._id;
+          fetch(`/api/thoughts?episodeId=${episodeId}&seriesId=${seriesId}&limit=20${user ? `&userId=${user._id}` : ""}`)
+            .then(r => r.json())
+            .then(d => { if (Array.isArray(d)) setCommentsState({ episodeId, comments: d }); })
+            .catch(() => {});
+        }}
       />
-    </>
+    </div>
   );
 }
 

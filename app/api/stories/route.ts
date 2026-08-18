@@ -7,15 +7,28 @@ import { StoryGroup } from "@/types";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// GET /api/stories?userId=<me>
-//
-// Returns the home rail: one group per author, newest story first.
-// Scoped to people you follow plus yourself — a global story feed would
-// fill the rail with strangers.
+// GET /api/stories?userId=<me>              → home rail (24h, following + self)
+// GET /api/stories?archive=1&userId=<me>    → that user's own archive, all-time
 export async function GET(req: NextRequest) {
   try {
     await connectDB();
     const me = req.nextUrl.searchParams.get("userId") || "";
+
+    if (req.nextUrl.searchParams.get("archive") === "1") {
+      if (!me) return NextResponse.json({ error: "userId is required" }, { status: 400 });
+      const stories = await StoryModel.find({ userId: me }).sort({ createdAt: -1 }).limit(300).lean<any[]>();
+      return NextResponse.json(stories.map(s => ({
+        _id: idOf(s._id), userId: s.userId, kind: s.kind,
+        caption: s.caption || "", mediaUrl: s.mediaUrl || "",
+        createdAt: iso(s.createdAt), expiresAt: iso(s.expiresAt),
+        viewCount: (s.viewedBy || []).length,
+        hidden: !!s.hidden,
+        live: new Date(s.expiresAt).getTime() > Date.now(),
+        likeCount: (s.likedBy || []).length,
+        liked: (s.likedBy || []).includes(me),
+        commentCount: s.commentCount ?? 0,
+      })));
+    }
 
     let followingIds: string[] | null = null;
     if (me) {
@@ -25,7 +38,7 @@ export async function GET(req: NextRequest) {
 
     // The explicit expiry filter matters: Mongo's TTL reaper only runs
     // about once a minute, so without it an expired story stays visible.
-    const q: any = { expiresAt: { $gt: new Date() } };
+    const q: any = { expiresAt: { $gt: new Date() }, removedByModeration: { $ne: true } };
     if (followingIds) {
       // Your own stories always show to you (hidden or not — "hidden"
       // means hidden from everyone else, not from yourself); people you
@@ -62,6 +75,9 @@ export async function GET(req: NextRequest) {
         createdAt: iso(s.createdAt), expiresAt: iso(s.expiresAt),
         viewCount: (s.viewedBy || []).length,
         hidden: !!s.hidden,
+        likeCount: (s.likedBy || []).length,
+        liked: !!me && (s.likedBy || []).includes(me),
+        commentCount: s.commentCount ?? 0,
       });
     }
 

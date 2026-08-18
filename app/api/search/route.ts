@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
     const rx = safeRx(q);
 
     const series = await SeriesModel.find({
+      isDraft: { $ne: true },
       $or: [{ title: rx }, { description: rx }, { tags: rx }, { genre: rx }, { narrator: rx }],
     }).select("-episodes.transcript -episodes.transcriptSegments").limit(20).lean<any[]>();
 

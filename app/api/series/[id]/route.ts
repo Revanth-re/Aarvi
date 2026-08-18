@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { SeriesModel } from "@/models/Series";
+import { UserModel } from "@/models/User";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { requireUser } from "@/lib/requireUser";
 import { processEpisodeTranscripts } from "@/lib/gemini";
+import { avgEpisodeMinutes } from "@/lib/gamification";
 
 export const maxDuration = 300;
 
@@ -13,9 +15,40 @@ export async function GET(_: NextRequest, { params }: P) {
   try {
     await connectDB();
     const { id } = await params;
-    const doc = await SeriesModel.findById(id).lean();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const doc: any = await SeriesModel.findById(id).lean();
     if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    return NextResponse.json(doc);
+
+    const isAdmin = !requireAdmin(_);
+    const requesterId = _.headers.get("x-user-id");
+    const isOwner = !!requesterId && requesterId === doc.creatorId;
+
+    // A draft series doesn't exist as far as anyone but its creator
+    // (or an admin) is concerned — 404 rather than 403 so it doesn't
+    // even confirm the id is real.
+    if (doc.isDraft && !isAdmin && !isOwner) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    if (isAdmin || isOwner) return NextResponse.json(doc);
+
+    // Follower-only episodes need to know if this requester actually
+    // follows the creator — one extra lookup, only for non-owners.
+    let followsCreator = false;
+    if (requesterId && doc.creatorId) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const requester = await UserModel.findById(requesterId).select("following").lean<any>();
+      followsCreator = !!requester?.following?.includes(doc.creatorId);
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const episodes = (doc.episodes || []).filter((e: any) => {
+      if (e.isDraft || e.takedownActioned) return false;
+      if (e.visibility === "private") return false;
+      if (e.visibility === "followers") return followsCreator;
+      return true; // "public" or unset (legacy default)
+    });
+    return NextResponse.json({ ...doc, episodes, totalEpisodes: episodes.length });
   } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }
 }
 
@@ -50,6 +83,7 @@ export async function PUT(req: NextRequest, { params }: P) {
     if (body.episodes) {
       body.episodes = await processEpisodeTranscripts(body.episodes, existingDoc.episodes || []);
       body.totalEpisodes = body.episodes.length;
+      body.avgMinutes = avgEpisodeMinutes(body.episodes);
     }
     const doc = await SeriesModel.findByIdAndUpdate(id, body, { new: true }).lean();
     return NextResponse.json(doc);

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { UserModel } from "@/models/User";
-import { notifyUser } from "@/lib/notify";
+import { notifyAndPush } from "@/lib/notify";
 
 type P = { params: Promise<{ id: string }> };
 
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest, { params }: P) {
       status = "requested";
       await Promise.all([actor.save(), target.save()]);
 
-      await notifyUser(targetId, {
+      await notifyAndPush(targetId, {
         type: "follow_request",
         category: "social",
         title: `${actor.name || "Someone"} wants to follow you`,
@@ -58,6 +58,8 @@ export async function POST(req: NextRequest, { params }: P) {
         link: "/profile/requests",
         fromUserId: id,
         fromUserName: actor.name,
+        toggle: "follows",
+        pushUrl: "/profile/requests",
       });
     } else {
       // Public account (the default) → follow immediately, no approval needed.
@@ -65,7 +67,7 @@ export async function POST(req: NextRequest, { params }: P) {
       status = "following";
       await actor.save();
 
-      await notifyUser(targetId, {
+      await notifyAndPush(targetId, {
         type: "new_follower",
         category: "social",
         title: `${actor.name || "Someone"} started following you`,
@@ -73,6 +75,8 @@ export async function POST(req: NextRequest, { params }: P) {
         link: `/u/${id}`,
         fromUserId: id,
         fromUserName: actor.name,
+        toggle: "follows",
+        pushUrl: `/u/${id}`,
       });
     }
 
