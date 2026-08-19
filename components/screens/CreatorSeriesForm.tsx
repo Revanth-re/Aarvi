@@ -433,6 +433,15 @@ export default function CreatorSeriesForm({ initial }: Props) {
                       </span>
                     </label>
 
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                      <input type="checkbox" checked={!!ep.isLocked}
+                        onChange={e => setEp(i, "isLocked", e.target.checked)}
+                        style={{ accentColor: "var(--accent)", width: 15, height: 15 }}/>
+                      <span style={{ fontSize: 12.5, color: "var(--text2)" }}>
+                        Paid episode (listeners unlock with coins)
+                      </span>
+                    </label>
+
                     {isEdit && ep._id && ep.isDraft && (
                       <button onClick={() => publishEpisodeNow(i)} disabled={publishing[i]}
                         className="btn btn-soft btn-sm" style={{ justifyContent: "center" }}>

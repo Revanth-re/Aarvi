@@ -1,12 +1,13 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Heart, MessageCircle, Send, Bookmark, Play, Pause, Zap } from "lucide-react";
-import { ShortFeedItem } from "@/types";
+import { Heart, MessageCircle, Send, Bookmark, Play, Pause, Zap, X, Trash2, Pencil, Check } from "lucide-react";
+import { ShortFeedItem, ShortComment, Conversation } from "@/types";
 import { useApp, useToast, usePlayer, useDataCache, cacheKeyFor } from "@/store";
-import { formatCount, formatTime } from "@/lib/gamification";
-import { Waveform, EmptyState, Screen } from "@/components/kit";
+import { formatCount, formatTime, timeAgo } from "@/lib/gamification";
+import { Waveform, EmptyState, Screen, Sheet } from "@/components/kit";
 import TopBar from "@/components/shell/TopBar";
+import Avatar from "@/components/ui/Avatar";
 
 /* eslint-disable @next/next/no-img-element */
 
@@ -31,6 +32,20 @@ export default function ShortsScreen() {
   const [loading, setLoading] = useState(!cached);
   const [active, setActive] = useState(0);
   const [playing, setLocal] = useState(true);
+
+  // ── Comments ──
+  const [commentsFor, setCommentsFor] = useState<ShortFeedItem | null>(null);
+  const [comments, setComments] = useState<ShortComment[]>([]);
+  const [commentsLoaded, setCommentsLoaded] = useState(false);
+  const [commentDraft, setCommentDraft] = useState("");
+  const [posting, setPosting] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+
+  // ── Share to a friend (in-app DM) ──
+  const [shareFor, setShareFor] = useState<ShortFeedItem | null>(null);
+  const [convos, setConvos] = useState<Conversation[]>([]);
+  const [sendingTo, setSendingTo] = useState<string | null>(null);
 
   const audio = useRef<HTMLAudioElement>(null);
   const container = useRef<HTMLDivElement>(null);
@@ -131,12 +146,106 @@ export default function ShortsScreen() {
     }
   };
 
-  const share = async (item: ShortFeedItem) => {
+  const shareExternal = async (item: ShortFeedItem) => {
     const url = `${window.location.origin}/series/${item.seriesId}`;
     try {
-      if (navigator.share) await navigator.share({ title: item.seriesTitle, url });
+      if (navigator.share) await navigator.share({ title: item.caption || item.seriesTitle, url });
       else { await navigator.clipboard.writeText(url); showToast("Link copied", "success"); }
     } catch { /* dismissed */ }
+  };
+
+  // Instagram-style "send to a friend" — picks from your existing DM
+  // threads rather than only the OS share sheet. Reuses the same
+  // messages endpoint the Messages tab itself posts to.
+  const openShareToFriend = (item: ShortFeedItem) => {
+    if (!user) { showToast("Log in to share", "info"); return; }
+    setShareFor(item);
+    fetch(`/api/messages?userId=${user._id}`)
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d.conversations)) setConvos(d.conversations); })
+      .catch(() => {});
+  };
+  const sendToFriend = async (toId: string) => {
+    if (!user || !shareFor) return;
+    setSendingTo(toId);
+    try {
+      const url = `${window.location.origin}/series/${shareFor.seriesId}`;
+      const r = await fetch("/api/messages", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user._id, toId,
+          text: `Check out this clip 🎧 "${shareFor.caption || shareFor.episodeTitle}" — ${url}`,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok || d.error) { showToast(d.error || "Couldn't send", "error"); return; }
+      showToast("Sent!", "success");
+      setShareFor(null);
+    } catch {
+      showToast("Network error", "error");
+    } finally {
+      setSendingTo(null);
+    }
+  };
+
+  const openComments = (item: ShortFeedItem) => {
+    setCommentsFor(item);
+    setCommentsLoaded(false);
+    fetch(`/api/shorts/${item._id}/comments${user ? `?userId=${user._id}` : ""}`)
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setComments(d); })
+      .catch(() => {})
+      .finally(() => setCommentsLoaded(true));
+  };
+  const postComment = async () => {
+    if (!user || !commentsFor) { showToast("Log in to comment", "info"); return; }
+    const text = commentDraft.trim();
+    if (!text) return;
+    setPosting(true);
+    try {
+      const r = await fetch(`/api/shorts/${commentsFor._id}/comments`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user._id, text }),
+      });
+      const d = await r.json();
+      if (!r.ok || d.error) { showToast(d.error || "Couldn't post", "error"); return; }
+      setComments(prev => [...prev, d]);
+      setCommentDraft("");
+      setItems(prev => prev.map(s => s._id === commentsFor._id ? { ...s, commentCount: s.commentCount + 1 } : s));
+    } catch {
+      showToast("Network error", "error");
+    } finally {
+      setPosting(false);
+    }
+  };
+  const saveEdit = async (commentId: string) => {
+    if (!user || !commentsFor) return;
+    const text = editDraft.trim();
+    if (!text) return;
+    try {
+      const r = await fetch(`/api/shorts/${commentsFor._id}/comments/${commentId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user._id, text }),
+      });
+      const d = await r.json();
+      if (!r.ok || d.error) { showToast(d.error || "Couldn't save", "error"); return; }
+      setComments(prev => prev.map(c => c._id === commentId ? { ...c, text: d.text, editedAt: d.editedAt } : c));
+      setEditingId(null);
+    } catch {
+      showToast("Network error", "error");
+    }
+  };
+  const deleteComment = async (commentId: string) => {
+    if (!user || !commentsFor) return;
+    try {
+      const r = await fetch(`/api/shorts/${commentsFor._id}/comments/${commentId}?userId=${user._id}`, { method: "DELETE" });
+      const d = await r.json();
+      if (!r.ok || d.error) { showToast(d.error || "Couldn't delete", "error"); return; }
+      setComments(prev => prev.filter(c => c._id !== commentId));
+      setItems(prev => prev.map(s => s._id === commentsFor._id ? { ...s, commentCount: Math.max(0, s.commentCount - 1) } : s));
+    } catch {
+      showToast("Network error", "error");
+    }
   };
 
   if (loading) {
@@ -226,9 +335,9 @@ export default function ShortsScreen() {
               <RailBtn onClick={e => { e.stopPropagation(); act(item, idx, "like"); }}
                 icon={<Heart size={26} fill={item.liked ? "#FF4D6D" : "none"} color={item.liked ? "#FF4D6D" : "#fff"}/>}
                 label={formatCount(item.likeCount)}/>
-              <RailBtn onClick={e => { e.stopPropagation(); showToast("Comments on shorts aren't built yet", "info"); }}
+              <RailBtn onClick={e => { e.stopPropagation(); openComments(item); }}
                 icon={<MessageCircle size={25}/>} label={formatCount(item.commentCount)}/>
-              <RailBtn onClick={e => { e.stopPropagation(); share(item); }}
+              <RailBtn onClick={e => { e.stopPropagation(); openShareToFriend(item); }}
                 icon={<Send size={24}/>} label="share"/>
               <RailBtn onClick={e => { e.stopPropagation(); act(item, idx, "save"); }}
                 icon={<Bookmark size={24} fill={item.saved ? "#fff" : "none"}/>}/>
@@ -250,6 +359,103 @@ export default function ShortsScreen() {
           </div>
         ))}
       </div>
+
+      {/* ── Comments ── */}
+      <Sheet open={!!commentsFor} onClose={() => setCommentsFor(null)} title="Comments">
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, maxHeight: "70vh" }}>
+          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, minHeight: 80 }}>
+            {!commentsLoaded ? (
+              <div className="skeleton" style={{ height: 60, borderRadius: 14 }}/>
+            ) : comments.length ? comments.map(c => (
+              <div key={c._id} style={{ display: "flex", gap: 9 }}>
+                <Avatar name={c.userName} image={c.userImage} size={30}/>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span className="truncate" style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text)" }}>{c.userHandle}</span>
+                    <span style={{ fontSize: 10.5, color: "var(--text3)" }}>
+                      {timeAgo(c.createdAt)}{c.editedAt && " · edited"}
+                    </span>
+                  </div>
+                  {editingId === c._id ? (
+                    <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                      <input className="inp" value={editDraft} onChange={e => setEditDraft(e.target.value)}
+                        style={{ padding: "7px 10px", fontSize: 12.5 }} autoFocus/>
+                      <button onClick={() => saveEdit(c._id)} className="btn btn-soft btn-xs" aria-label="Save"><Check size={13}/></button>
+                      <button onClick={() => setEditingId(null)} className="btn btn-ghost btn-xs" aria-label="Cancel"><X size={13}/></button>
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: 13, color: "var(--text2)", margin: "2px 0 0", lineHeight: 1.5 }}>{c.text}</p>
+                  )}
+                  {c.mine && editingId !== c._id && (
+                    <div style={{ display: "flex", gap: 12, marginTop: 4 }}>
+                      <button onClick={() => { setEditingId(c._id); setEditDraft(c.text); }}
+                        style={{ display: "flex", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", color: "var(--text3)", fontSize: 11, padding: 0 }}>
+                        <Pencil size={11}/>Edit
+                      </button>
+                      <button onClick={() => deleteComment(c._id)}
+                        style={{ display: "flex", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", color: "var(--danger)", fontSize: 11, padding: 0 }}>
+                        <Trash2 size={11}/>Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )) : (
+              <p style={{ fontSize: 12.5, color: "var(--text3)", textAlign: "center", margin: "20px 0" }}>
+                No comments yet — say something!
+              </p>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 8, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
+            <input className="inp" value={commentDraft} onChange={e => setCommentDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") postComment(); }}
+              placeholder="Add a comment…" style={{ flex: 1 }}/>
+            <button onClick={postComment} disabled={posting || !commentDraft.trim()} className="btn btn-primary btn-sm">
+              {posting ? "…" : "Post"}
+            </button>
+          </div>
+        </div>
+      </Sheet>
+
+      {/* ── Share to a friend ── */}
+      <Sheet open={!!shareFor} onClose={() => setShareFor(null)} title="Share">
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <button onClick={() => shareFor && shareExternal(shareFor)} style={{
+            display: "flex", alignItems: "center", gap: 10, padding: "10px 4px",
+            background: "none", border: "none", cursor: "pointer", textAlign: "left", width: "100%",
+          }}>
+            <span style={{
+              width: 40, height: 40, borderRadius: "50%", background: "var(--grad)",
+              display: "flex", alignItems: "center", justifyContent: "center", flex: "none",
+            }}>
+              <Send size={16} color="#fff"/>
+            </span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>Share via…</span>
+          </button>
+
+          {convos.length ? convos.map(c => {
+            const other = c.participants[0];
+            if (!other) return null;
+            return (
+              <button key={c._id} onClick={() => sendToFriend(other._id)} disabled={sendingTo === other._id}
+                style={{
+                  display: "flex", alignItems: "center", gap: 10, padding: "10px 4px",
+                  background: "none", border: "none", cursor: "pointer", textAlign: "left", width: "100%",
+                }}>
+                <Avatar name={other.name} image={other.image} size={40}/>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: "var(--text)" }} className="truncate">
+                  {other.name}
+                </span>
+                {sendingTo === other._id && <span style={{ fontSize: 11, color: "var(--text3)" }}>Sending…</span>}
+              </button>
+            );
+          }) : (
+            <p style={{ fontSize: 12, color: "var(--text3)", padding: "8px 4px" }}>
+              Message someone first to share directly with them here.
+            </p>
+          )}
+        </div>
+      </Sheet>
     </>
   );
 }

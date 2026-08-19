@@ -39,6 +39,7 @@ function MessagesScreenInner() {
   const withId = searchParams.get("with");
 
   const [convos, setConvos] = useState<Conversation[]>([]);
+  const [convosLoaded, setConvosLoaded] = useState(false);
   const [openWith, setOpenWith] = useState<Conversation["participants"][0] | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [draft, setDraft] = useState("");
@@ -58,7 +59,8 @@ function MessagesScreenInner() {
     fetch(`/api/messages?userId=${user._id}`)
       .then(r => r.json())
       .then(d => { if (!cancelled && Array.isArray(d.conversations)) setConvos(d.conversations); })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setConvosLoaded(true); });
     return () => { cancelled = true; };
   }, [user?._id, reloadKey]);
 
@@ -344,35 +346,39 @@ function MessagesScreenInner() {
           Messages
         </h1>
 
-        {convos.length ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {convos.map(c => {
+        {!convosLoaded ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {[0, 1, 2].map(i => <div key={i} className="skeleton" style={{ height: 54, borderRadius: 12 }}/>)}
+          </div>
+        ) : convos.length ? (
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {convos.map((c, i) => {
               const other = c.participants[0];
               if (!other) return null;
               return (
-                <button key={c._id} onClick={() => setOpenWith(other)} className="card"
-                  style={{ display: "flex", alignItems: "center", gap: 11, padding: 12, cursor: "pointer", textAlign: "left", width: "100%" }}>
-                  <Avatar name={other.name} image={other.image} size={40}/>
+                <button key={c._id} onClick={() => setOpenWith(other)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 12, padding: "10px 2px",
+                    cursor: "pointer", textAlign: "left", width: "100%",
+                    background: "none", border: "none",
+                    borderBottom: i < convos.length - 1 ? "1px solid var(--border)" : "none",
+                  }}>
+                  <Avatar name={other.name} image={other.image} size={54}/>
                   <span style={{ flex: 1, minWidth: 0 }}>
-                    <span className="truncate" style={{ display: "block", fontSize: 13.5, fontWeight: 700, color: "var(--text)" }}>
+                    <span className="truncate" style={{ display: "block", fontSize: 14, fontWeight: c.unread > 0 ? 700 : 600, color: "var(--text)" }}>
                       {other.name}
                     </span>
-                    <span className="truncate" style={{ display: "block", fontSize: 12, color: "var(--text3)" }}>
-                      {c.lastMessage?.text ?? "Say hello"}
+                    <span className="truncate" style={{
+                      display: "block", fontSize: 12.5, marginTop: 2,
+                      color: c.unread > 0 ? "var(--text)" : "var(--text3)",
+                      fontWeight: c.unread > 0 ? 600 : 400,
+                    }}>
+                      {c.lastMessage?.text ?? "Say hello"} · {timeAgo(c.updatedAt)}
                     </span>
                   </span>
-                  <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flex: "none" }}>
-                    <span style={{ fontSize: 10.5, color: "var(--text3)" }}>{timeAgo(c.updatedAt)}</span>
-                    {c.unread > 0 && (
-                      <span style={{
-                        minWidth: 18, height: 18, borderRadius: 99, background: "var(--accent)",
-                        color: "#fff", fontSize: 10, fontWeight: 700,
-                        display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px",
-                      }}>
-                        {c.unread}
-                      </span>
-                    )}
-                  </span>
+                  {c.unread > 0 && (
+                    <span style={{ width: 9, height: 9, borderRadius: "50%", background: "var(--accent)", flex: "none" }}/>
+                  )}
                 </button>
               );
             })}

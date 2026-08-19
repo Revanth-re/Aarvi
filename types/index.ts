@@ -227,6 +227,14 @@ export interface ShortFeedItem extends Short {
   seriesTitle: string; coverImage: string; audioUrl: string;
   episodeTitle: string; liked: boolean; saved: boolean;
 }
+export interface ShortComment {
+  _id: string; shortId: string;
+  userId: string; userName: string; userHandle: string; userImage: string;
+  text: string; createdAt: string; editedAt?: string;
+  /** True when the requesting user authored it — lets the UI show
+   *  edit/delete only on your own comments. */
+  mine: boolean;
+}
 
 // ══════════════════════════════════════════════════════════
 // Stories — 24-hour posts on the home rail

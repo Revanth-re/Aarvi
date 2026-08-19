@@ -1,11 +1,12 @@
 "use client";
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Palette, Bell, Headphones, Timer, Download, Shield, Sun, Moon, Monitor, Layers, LogOut, UserX, FileText, ChevronRight, Type } from "lucide-react";
+import { Palette, Bell, Headphones, Timer, Download, Shield, Sun, Moon, Monitor, Layers, LogOut, UserX, FileText, ChevronRight, Type, Share2 } from "lucide-react";
 import { ThemeMode, TabBarStyle, UserSettings } from "@/types";
-import { useApp, useDataCache, useToast } from "@/store";
+import { useApp, useDataCache, useToast, useInstallPrompt } from "@/store";
 import { pushSupported, enablePush, disablePush } from "@/lib/push-client";
+import { isStandalone } from "@/components/shell/InstallPrompt";
 import { Screen } from "@/components/kit";
 import TopBar from "@/components/shell/TopBar";
 
@@ -31,7 +32,25 @@ export default function SettingsScreen() {
   const setTabBarStyle = useApp(s => s.setTabBarStyle);
   const clearCache = useDataCache(s => s.clearCache);
   const showToast = useToast(s => s.show);
+  const showInstallPrompt = useInstallPrompt(s => s.show);
   const [deleting, setDeleting] = useState(false);
+  // Whether the PWA is already installed — read via useSyncExternalStore
+  // rather than state+effect, since matchMedia is an external browser
+  // API this component doesn't own. Handles SSR (false until hydrated)
+  // without a manual mount-effect.
+  const appInstalled = useSyncExternalStore(
+    () => () => {}, // install state won't change mid-session; no subscription needed
+    () => isStandalone(),
+    () => false,
+  );
+
+  const shareAppLink = async () => {
+    const url = typeof window !== "undefined" ? window.location.origin : "";
+    try {
+      if (navigator.share) await navigator.share({ title: "SWARA FM", text: "Listen with me on SWARA FM", url });
+      else { await navigator.clipboard.writeText(url); showToast("Link copied", "success"); }
+    } catch { /* dismissed */ }
+  };
   // Feature-detected client-side only, after mount — checking
   // navigator/window during the server render would mismatch hydration.
   const [canPush, setCanPush] = useState(false);
@@ -116,6 +135,36 @@ export default function SettingsScreen() {
         <h1 style={{ fontFamily: "var(--ff-display)", fontSize: 26, fontWeight: 700, margin: 0, color: "var(--text)" }}>
           Settings
         </h1>
+
+        {/* ── Download the app / Share app link ──
+             Moved off Profile (which is now a clean Instagram-style
+             page) — and actually hidden once installed, fixing the old
+             bug where this kept showing even after the PWA was added
+             to the home screen. */}
+        {!appInstalled && (
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => showInstallPrompt()} className="card" style={{
+              flex: 1, display: "flex", alignItems: "center", gap: 12, padding: "13px 14px",
+              cursor: "pointer", textAlign: "left",
+            }}>
+              <span style={{
+                width: 38, height: 38, borderRadius: 11, background: "var(--grad)", flex: "none",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <Download size={17} color="#fff"/>
+              </span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--text)" }}>Download the app</span>
+                <span style={{ display: "block", fontSize: 11.5, color: "var(--text3)" }}>Add to your home screen</span>
+              </span>
+            </button>
+            <button onClick={shareAppLink} className="card" aria-label="Share app link" style={{
+              width: 58, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+            }}>
+              <Share2 size={18} color="var(--accent)"/>
+            </button>
+          </div>
+        )}
 
         {/* ── Appearance ── */}
         <Group icon={<Palette size={15}/>} title="Appearance" sub="Mode and tab bar style">

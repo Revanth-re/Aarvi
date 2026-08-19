@@ -224,8 +224,14 @@ export default function SeriesDetail({ seriesId }: { seriesId: string }) {
                         </span>
                       )}
                     </span>
-                    <span style={{ display: "block", fontSize: 11.5, color: "var(--text3)" }}>
-                      {formatTime(ep.duration || 0)}{!ep.audioUrl && " · no audio yet"}
+                    <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: "var(--text3)" }}>
+                      <span>{formatTime(ep.duration || 0)}{!ep.audioUrl && " · no audio yet"}</span>
+                      <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                        <Play size={9} fill="var(--text3)"/>{formatCount(ep.playCount || 0)}
+                      </span>
+                      <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                        <Heart size={9} fill="var(--text3)"/>{formatCount(ep.likeCount || 0)}
+                      </span>
                     </span>
                   </span>
                   {open ? (

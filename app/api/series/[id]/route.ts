@@ -91,11 +91,21 @@ export async function PUT(req: NextRequest, { params }: P) {
 }
 
 export async function DELETE(req: NextRequest, { params }: P) {
-  const denied = requireAdmin(req);
-  if (denied) return denied;
   try {
     await connectDB();
     const { id } = await params;
+    const existingDoc = await SeriesModel.findById(id).select("creatorId").lean<{ creatorId?: string }>();
+    if (!existingDoc) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    const isAdmin = !requireAdmin(req);
+    if (!isAdmin) {
+      const auth = await requireUser(req);
+      if (auth instanceof NextResponse) return auth;
+      if (existingDoc.creatorId !== auth.userId) {
+        return NextResponse.json({ error: "You don't own this series" }, { status: 403 });
+      }
+    }
+
     await SeriesModel.findByIdAndDelete(id);
     return NextResponse.json({ success: true });
   } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Search as SearchIcon, X, TrendingUp, Compass, Mic } from "lucide-react";
+import { Search as SearchIcon, X, TrendingUp, Compass, Mic, Loader2 } from "lucide-react";
 import { SearchPayload } from "@/types";
 import { useApp, useToast } from "@/store";
 import { genreColor } from "@/lib/gamification";
@@ -92,7 +92,20 @@ export default function SearchScreen() {
 
         {hasQuery ? (
           <>
-            {searching && <p style={{ fontSize: 12.5, color: "var(--text3)" }}>Searching…</p>}
+            {searching && !results ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text3)", fontSize: 12.5 }}>
+                  <Loader2 size={14} className="spin"/>Searching…
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  {[0, 1, 2, 3].map(i => <div key={i} className="skeleton" style={{ aspectRatio: "0.72", borderRadius: 14 }}/>)}
+                </div>
+              </div>
+            ) : searching && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text3)", fontSize: 12.5 }}>
+                <Loader2 size={14} className="spin"/>Searching…
+              </div>
+            )}
 
             {!!results?.series.length && (
               <section>

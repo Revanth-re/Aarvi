@@ -22,6 +22,7 @@ export default function CoinsScreen() {
   const [demoMode, setDemoMode] = useState(false);
   const [busy, setBusy] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+  const [loaded, setLoaded] = useState(false);
   const reload = useCallback(() => setReloadKey(k => k + 1), []);
 
   useEffect(() => {
@@ -30,7 +31,8 @@ export default function CoinsScreen() {
     fetch(`/api/coins?userId=${user._id}`)
       .then(r => r.json())
       .then(d => { if (!cancelled && !d.error) { setW(d); setDemoMode(!!d.demoMode); } })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
   }, [user?._id, reloadKey]);
 
@@ -93,6 +95,14 @@ export default function CoinsScreen() {
     <>
       <TopBar title="Coins"/>
       <Screen>
+        {!loaded ? (
+          <>
+            <div className="skeleton" style={{ height: 130, borderRadius: "var(--r-lg)" }}/>
+            <div className="skeleton" style={{ height: 90, borderRadius: "var(--r-lg)" }}/>
+            <div className="skeleton" style={{ height: 90, borderRadius: "var(--r-lg)" }}/>
+          </>
+        ) : (
+        <>
         {/* ── Balance ── */}
         <div style={{
           background: "var(--grad)", borderRadius: "var(--r-lg)", padding: "22px 20px",
@@ -225,6 +235,8 @@ export default function CoinsScreen() {
               })}
             </div>
           </section>
+        )}
+        </>
         )}
       </Screen>
     </>

@@ -1,33 +1,32 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Mic, Pencil, MessageSquare, Settings as Cog, Flame, Headphones, MessageCircle, UserCheck, Download, Share2, Eye, BarChart3, Archive } from "lucide-react";
-import { DnaSlice, Thought } from "@/types";
-import { useApp, useDataCache, cacheKeyFor, useInstallPrompt, useToast } from "@/store";
-import { formatCount } from "@/lib/gamification";
-import { Screen, SectionHeader, Cover, EmptyState } from "@/components/kit";
-import TopBar, { CoinGlyph } from "@/components/shell/TopBar";
+import { Mic, Pencil, Share2, Plus, MoreHorizontal, Disc3 } from "lucide-react";
+import { Series } from "@/types";
+import { useApp, useDataCache, cacheKeyFor, useToast } from "@/store";
+import { gradientFor } from "@/lib/gamification";
+import { Screen, EmptyState } from "@/components/kit";
+import TopBar from "@/components/shell/TopBar";
 import Avatar from "@/components/ui/Avatar";
-import ThoughtCard from "./ThoughtCard";
 
-interface Game {
-  coins: number; streak: number; hours: number;
-  level: number; levelTitle: string; showCount: number;
-}
-interface RecentItem { _id: string; title: string; coverImage: string; }
+/* eslint-disable @next/next/no-img-element */
 
-interface ProfileCache { game: Game | null; dna: DnaSlice[]; recent: RecentItem[]; thoughts: Thought[]; followerCount: number; followingCount: number; }
+interface ProfileCache { followerCount: number; followingCount: number; posts: Series[]; }
 
 export default function ProfileScreen() {
   const user = useApp(s => s.user);
-  const showInstallPrompt = useInstallPrompt(s => s.show);
   const showToast = useToast(s => s.show);
 
-  const shareAppLink = async () => {
-    const url = typeof window !== "undefined" ? window.location.origin : "";
+  // Share *this account's* profile — distinct from sharing the app
+  // itself (that lives in Settings now, alongside Download, so this
+  // header stays a clean Instagram-style profile rather than a mix of
+  // app-promotion and profile actions).
+  const shareProfile = async () => {
+    if (!user) return;
+    const url = typeof window !== "undefined" ? `${window.location.origin}/u/${user._id}` : "";
     try {
-      if (navigator.share) await navigator.share({ title: "SWARA FM", text: "Listen with me on SWARA FM", url });
-      else { await navigator.clipboard.writeText(url); showToast("Link copied", "success"); }
+      if (navigator.share) await navigator.share({ title: user.name || "My profile", text: "Follow me on SWARA FM", url });
+      else { await navigator.clipboard.writeText(url); showToast("Profile link copied", "success"); }
     } catch { /* dismissed */ }
   };
 
@@ -35,12 +34,10 @@ export default function ProfileScreen() {
   const cached = useDataCache(s => s.cache[cacheKey]) as ProfileCache | undefined;
   const setCache = useDataCache(s => s.setCache);
 
-  const [game, setGame] = useState<Game | null>(cached?.game ?? null);
-  const [dna, setDna] = useState<DnaSlice[]>(cached?.dna ?? []);
-  const [recent, setRecent] = useState<RecentItem[]>(cached?.recent ?? []);
-  const [thoughts, setThoughts] = useState<Thought[]>(cached?.thoughts ?? []);
   const [followerCount, setFollowerCount] = useState(cached?.followerCount ?? 0);
   const [followingCount, setFollowingCount] = useState(cached?.followingCount ?? 0);
+  const [posts, setPosts] = useState<Series[]>(cached?.posts ?? []);
+  const [loaded, setLoaded] = useState(!!cached);
   // Not part of the seeded/cached payload — this is only ever a small
   // badge count, cheap enough to refetch each visit rather than store.
   const [requestCount, setRequestCount] = useState(0);
@@ -50,30 +47,23 @@ export default function ProfileScreen() {
     let cancelled = false;
 
     Promise.all([
-      fetch(`/api/users/${user._id}/gamification`).then(r => r.json()),
-      fetch(`/api/users/${user._id}/dna`).then(r => r.json()),
-      fetch(`/api/thoughts?userId=${user._id}&authorId=${user._id}&limit=3`).then(r => r.json()),
       fetch(`/api/users/${user._id}`).then(r => r.json()),
+      // Plain fetch, not creatorFetch — this "Posts" grid mirrors what a
+      // visitor to your public profile actually sees, so drafts stay
+      // excluded here the same way they're excluded for everyone else.
+      fetch(`/api/series?creatorId=${user._id}&limit=60`).then(r => r.json()),
     ])
-      .then(([g, d, t, u]) => {
+      .then(([u, s]) => {
         if (cancelled) return;
-        const nextGame = !g.error ? g : null;
-        const nextDna = Array.isArray(d.dna) ? d.dna : [];
-        const nextRecent = Array.isArray(d.recent) ? d.recent : [];
-        const nextThoughts = Array.isArray(t) ? t : [];
         const nextFollowers = !u.error ? (u.followerCount ?? 0) : 0;
         const nextFollowing = !u.error ? (u.followingCount ?? 0) : 0;
-        if (!g.error) setGame(nextGame);
-        if (Array.isArray(d.dna)) setDna(nextDna);
-        if (Array.isArray(d.recent)) setRecent(nextRecent);
-        if (Array.isArray(t)) setThoughts(nextThoughts);
+        const nextPosts = Array.isArray(s) ? s : [];
         if (!u.error) { setFollowerCount(nextFollowers); setFollowingCount(nextFollowing); }
-        setCache(cacheKey, {
-          game: nextGame, dna: nextDna, recent: nextRecent, thoughts: nextThoughts,
-          followerCount: nextFollowers, followingCount: nextFollowing,
-        });
+        setPosts(nextPosts);
+        setCache(cacheKey, { followerCount: nextFollowers, followingCount: nextFollowing, posts: nextPosts });
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoaded(true); });
 
     fetch(`/api/users/${user._id}/follow-requests`)
       .then(r => r.json())
@@ -100,181 +90,100 @@ export default function ProfileScreen() {
     <>
       <TopBar title="Profile"/>
       <Screen>
-        {/* ── Header card ── */}
-        <div style={{ background: "var(--grad)", borderRadius: "var(--r-lg)", padding: 18, boxShadow: "var(--shadow-lg)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 12 }}>
-            <span style={{ borderRadius: "50%", border: "2px solid rgba(255,255,255,.5)", display: "block", flex: "none" }}>
-              <Avatar name={user.name} image={user.image} size={62}/>
-            </span>
-            <span style={{ minWidth: 0 }}>
-              <span className="truncate" style={{ display: "block", fontSize: 20, fontWeight: 800, color: "#fff" }}>
-                {user.name || "Listener"}
-              </span>
-              <span className="truncate" style={{ display: "block", fontSize: 12.5, color: "rgba(255,255,255,.85)" }}>
-                {user.handle ? `@${user.handle}` : "@listener"}
-              </span>
-            </span>
-          </div>
-
-          {user.bio && (
-            <p style={{ fontSize: 12.5, color: "rgba(255,255,255,.9)", margin: "0 0 12px", lineHeight: 1.5 }}>
-              {user.bio}
-            </p>
-          )}
-
-          <div style={{ display: "flex", gap: 18, marginBottom: 12 }}>
-            <Link href={`/u/${user._id}/connections?tab=followers`}
-              style={{ fontSize: 12.5, color: "rgba(255,255,255,.92)", textDecoration: "none" }}>
-              <strong style={{ fontSize: 14 }}>{followerCount.toLocaleString()}</strong> followers
-            </Link>
-            <Link href={`/u/${user._id}/connections?tab=following`}
-              style={{ fontSize: 12.5, color: "rgba(255,255,255,.92)", textDecoration: "none" }}>
-              <strong style={{ fontSize: 14 }}>{followingCount.toLocaleString()}</strong> following
-            </Link>
-          </div>
-
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            <Link href="/creator" className="btn btn-xs" style={pillBtn}><Mic size={13}/>Creator Studio</Link>
-            <Link href="/profile/edit" className="btn btn-xs" style={pillBtn}><Pencil size={13}/>Edit profile</Link>
-            <Link href="/messages" className="btn btn-xs" style={pillBtn}><MessageSquare size={13}/>Messages</Link>
-            <Link href="/profile/requests" className="btn btn-xs" style={{ ...pillBtn, position: "relative" }}>
-              <UserCheck size={13}/>Requests
-              {requestCount > 0 && (
-                <span style={{
-                  position: "absolute", top: -5, right: -5, minWidth: 16, height: 16, borderRadius: 8,
-                  background: "#FF4D6D", color: "#fff", fontSize: 9.5, fontWeight: 800,
-                  display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px",
-                }}>
-                  {requestCount > 9 ? "9+" : requestCount}
-                </span>
-              )}
-            </Link>
-            <Link href={`/u/${user._id}?preview=1`} className="btn btn-xs" style={pillBtn}>
-              <Eye size={13}/>Preview
-            </Link>
-            <Link href="/settings" className="btn btn-xs" style={{ ...pillBtn, padding: "5px 10px" }} aria-label="Settings"><Cog size={13}/></Link>
-          </div>
-        </div>
-
-        {/* ── Download the app / Share app link ── */}
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => showInstallPrompt()} className="card" style={{
-            flex: 1, display: "flex", alignItems: "center", gap: 12, padding: "13px 14px",
-            cursor: "pointer", textAlign: "left",
-          }}>
-            <span style={{
-              width: 38, height: 38, borderRadius: 11, background: "var(--grad)", flex: "none",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <Download size={17} color="#fff"/>
-            </span>
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--text)" }}>Download the app</span>
-              <span style={{ display: "block", fontSize: 11.5, color: "var(--text3)" }}>Add to your home screen</span>
-            </span>
-          </button>
-          <button onClick={shareAppLink} className="card" aria-label="Share app link" style={{
-            width: 58, display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: "pointer",
-          }}>
-            <Share2 size={18} color="var(--accent)"/>
-          </button>
-        </div>
-
-        {/* ── Stats ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
-          <Stat icon={<CoinGlyph size={15}/>} value={formatCount(game?.coins ?? 0)} label="Coins" href="/coins"/>
-          <Stat icon={<Flame size={15}/>} value={String(game?.streak ?? 0)} label="Streak" href="/profile/stats"/>
-          <Stat icon={<Headphones size={15}/>} value={String(game?.showCount ?? 0)} label="Shows" href="/library"/>
-          <Stat icon={<MessageCircle size={15}/>} value={String(thoughts.length)} label="Thoughts"/>
-        </div>
-
-        {/* ── Stats & Archive shortcuts ── */}
-        <div style={{ display: "flex", gap: 8 }}>
-          <Link href="/profile/stats" className="btn btn-soft btn-sm" style={{ flex: 1, justifyContent: "center", textDecoration: "none" }}>
-            <BarChart3 size={14}/>Listening stats
-          </Link>
-          <Link href="/profile/archive" className="btn btn-soft btn-sm" style={{ flex: 1, justifyContent: "center", textDecoration: "none" }}>
-            <Archive size={14}/>Your archive
-          </Link>
-        </div>
-
-        {/* ── Listening DNA ── */}
-        <section>
-          <SectionHeader title="Listening DNA"/>
-          <div className="card" style={{ padding: 16 }}>
-            {dna.length ? dna.map(d => (
-              <div key={d.genre} style={{ marginBottom: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 5 }}>
-                  <span style={{ color: "var(--text)", fontWeight: 600 }}>{d.genre}</span>
-                  <span style={{ color: "var(--text3)" }}>{d.percent}%</span>
-                </div>
-                <div className="progress-track"><div className="progress-fill" style={{ width: `${d.percent}%` }}/></div>
-              </div>
-            )) : (
-              <p style={{ fontSize: 12.5, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>
-                Listen to a few episodes and your genre breakdown appears here.
-                It&apos;s weighted by time actually listened, not by what you saved.
-              </p>
-            )}
-          </div>
-        </section>
-
-        {/* ── Your thoughts ── */}
-        <section>
-          <SectionHeader title="Your thoughts" href="/library"/>
-          {thoughts.length ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {thoughts.map(t => (
-                <ThoughtCard key={t._id} thought={t}
-                  onDeleted={id => setThoughts(prev => prev.filter(x => x._id !== id))}/>
-              ))}
+        {/* ── Header ── */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+          <Avatar name={user.name} image={user.image} size={72}/>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="truncate" style={{ fontSize: 17, fontWeight: 700, color: "var(--text)" }}>
+              {user.name || "Listener"}
             </div>
-          ) : (
-            <p style={{ fontSize: 12.5, color: "var(--text3)" }}>
-              Nothing yet — pin one from the player while you listen.
-            </p>
-          )}
-        </section>
+            <div className="truncate" style={{ fontSize: 12.5, color: "var(--text3)" }}>
+              {user.handle ? `@${user.handle}` : "@listener"}
+            </div>
+          </div>
+          {/* Share sits up here, next to the identity — the row below
+              is purely actions (Edit/Post/Studio/More). */}
+          <button onClick={shareProfile} aria-label="Share profile" style={{
+            background: "none", border: "none", cursor: "pointer", color: "var(--text2)",
+            display: "flex", padding: 6, flex: "none",
+          }}>
+            <Share2 size={19}/>
+          </button>
+        </div>
 
-        {/* ── Recently played ── */}
-        {!!recent.length && (
-          <section>
-            <SectionHeader title="Recently played"/>
-            <div className="rail">
-              {recent.map(r => (
-                <Link key={r._id} href={`/series/${r._id}`} style={{ flex: "none", textDecoration: "none", width: 76 }}>
-                  <Cover id={r._id} url={r.coverImage} size={76} radius={16}/>
-                  <span className="truncate" style={{ display: "block", fontSize: 10.5, color: "var(--text3)", marginTop: 6, textAlign: "center" }}>
-                    {r.title}
-                  </span>
+        {user.bio && (
+          <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.6, margin: 0 }}>{user.bio}</p>
+        )}
+
+        <div style={{ display: "flex", gap: 20, fontSize: 13 }}>
+          {loaded ? (
+            <>
+              <span><strong style={{ color: "var(--text)" }}>{posts.length}</strong> <span style={{ color: "var(--text3)" }}>posts</span></span>
+              <Link href={`/u/${user._id}/connections?tab=followers`} style={{ textDecoration: "none" }}>
+                <strong style={{ color: "var(--text)" }}>{followerCount.toLocaleString()}</strong> <span style={{ color: "var(--text3)" }}>followers</span>
+              </Link>
+              <Link href={`/u/${user._id}/connections?tab=following`} style={{ textDecoration: "none" }}>
+                <strong style={{ color: "var(--text)" }}>{followingCount.toLocaleString()}</strong> <span style={{ color: "var(--text3)" }}>following</span>
+              </Link>
+            </>
+          ) : (
+            <div className="skeleton" style={{ height: 16, width: 180, borderRadius: 6 }}/>
+          )}
+        </div>
+
+        {/* ── Actions: Edit / Post / Studio / More — this account's
+             equivalent of the Follow/Message row on someone else's
+             profile (see app/u/[id]/page.tsx). ── */}
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link href="/profile/edit" className="btn btn-soft btn-sm" style={{ flex: 1, justifyContent: "center", textDecoration: "none" }}>
+            <Pencil size={14}/>Edit
+          </Link>
+          <Link href="/creator/new" className="btn btn-soft btn-sm" style={{ flex: 1, justifyContent: "center", textDecoration: "none" }}>
+            <Plus size={14}/>Post
+          </Link>
+          <Link href="/creator" className="btn btn-soft btn-sm" style={{ flex: 1, justifyContent: "center", textDecoration: "none" }}>
+            <Mic size={14}/>Studio
+          </Link>
+          <Link href="/profile/more" className="btn btn-soft btn-sm" style={{ padding: "8px 12px", position: "relative", textDecoration: "none" }} aria-label="More">
+            <MoreHorizontal size={14}/>
+            {requestCount > 0 && (
+              <span style={{
+                position: "absolute", top: -3, right: -3, width: 9, height: 9, borderRadius: "50%",
+                background: "#FF4D6D", border: "1.5px solid var(--surface)",
+              }}/>
+            )}
+          </Link>
+        </div>
+
+        {/* ── Posts ── */}
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>Posts</div>
+          {!loaded ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6 }}>
+              {[0, 1, 2].map(i => <div key={i} className="skeleton" style={{ aspectRatio: "1", borderRadius: 10 }}/>)}
+            </div>
+          ) : posts.length ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6 }}>
+              {posts.map(s => (
+                <Link key={s._id} href={`/series/${s._id}`} style={{ display: "block" }}>
+                  <div style={{
+                    aspectRatio: "1", borderRadius: 10, overflow: "hidden",
+                    background: gradientFor(s._id),
+                  }}>
+                    {s.coverImage && (
+                      <img src={s.coverImage} alt={s.title}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
+                    )}
+                  </div>
                 </Link>
               ))}
             </div>
-          </section>
-        )}
+          ) : (
+            <EmptyState icon={<Disc3 size={20}/>} title="No posts yet"
+              body="Publish a series from Creator Studio and it'll show up here."/>
+          )}
+        </div>
       </Screen>
     </>
   );
 }
-
-function Stat({
-  icon, value, label, href,
-}: { icon: React.ReactNode; value: string; label: string; href?: string }) {
-  const body = (
-    <>
-      <span style={{ display: "flex", justifyContent: "center", color: "var(--accent)", marginBottom: 4 }}>{icon}</span>
-      <span style={{ display: "block", fontSize: 15, fontWeight: 800, color: "var(--text)" }}>{value}</span>
-      <span style={{ display: "block", fontSize: 10, color: "var(--text3)" }}>{label}</span>
-    </>
-  );
-  const style: React.CSSProperties = { padding: "13px 6px", textAlign: "center", textDecoration: "none", display: "block" };
-  return href
-    ? <Link href={href} className="card" style={style}>{body}</Link>
-    : <div className="card" style={style}>{body}</div>;
-}
-
-const pillBtn: React.CSSProperties = {
-  background: "rgba(255,255,255,.22)", color: "#fff",
-  border: "1px solid rgba(255,255,255,.3)", backdropFilter: "blur(6px)",
-};

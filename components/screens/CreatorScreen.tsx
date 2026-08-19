@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Mic, Users, Headphones, TrendingUp, Plus, Clapperboard, Pencil, Play } from "lucide-react";
+import { Mic, Users, Headphones, TrendingUp, Plus, Clapperboard, Pencil, Play, Trash2 } from "lucide-react";
 import { Series } from "@/types";
 import { useApp, useToast } from "@/store";
 import { creatorFetch } from "@/lib/creatorFetch";
@@ -14,7 +14,9 @@ export default function CreatorScreen() {
   const showToast = useToast(s => s.show);
   const [series, setSeries] = useState<Series[]>([]);
   const [followers, setFollowers] = useState(0);
+  const [loaded, setLoaded] = useState(false);
   const [publishing, setPublishing] = useState<Record<string, boolean>>({});
+  const [deleting, setDeleting] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!user) return;
@@ -26,7 +28,8 @@ export default function CreatorScreen() {
     creatorFetch(`/api/series?creatorId=${user._id}&limit=50`)
       .then(r => r.json())
       .then(d => { if (!cancelled && Array.isArray(d)) setSeries(d); })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoaded(true); });
 
     fetch(`/api/users/${user._id}`)
       .then(r => r.json())
@@ -51,6 +54,22 @@ export default function CreatorScreen() {
       showToast("Network error", "error");
     } finally {
       setPublishing(p => ({ ...p, [id]: false }));
+    }
+  };
+
+  const deleteSeries = async (id: string, title: string) => {
+    if (!window.confirm(`Delete "${title}" permanently? This can't be undone.`)) return;
+    setDeleting(d => ({ ...d, [id]: true }));
+    try {
+      const r = await creatorFetch(`/api/series/${id}`, { method: "DELETE" });
+      const d = await r.json();
+      if (!r.ok || d.error) { showToast(d.error || "Couldn't delete", "error"); return; }
+      setSeries(s => s.filter(x => x._id !== id));
+      showToast("Series deleted", "success");
+    } catch {
+      showToast("Network error", "error");
+    } finally {
+      setDeleting(d => ({ ...d, [id]: false }));
     }
   };
 
@@ -101,7 +120,11 @@ export default function CreatorScreen() {
 
         <section>
           <SectionHeader title="Your series"/>
-          {series.length ? (
+          {!loaded ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {[0, 1].map(i => <div key={i} className="skeleton" style={{ height: 72, borderRadius: 14 }}/>)}
+            </div>
+          ) : series.length ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {series.map(s => {
                 const eps = s.episodes || [];
@@ -132,6 +155,10 @@ export default function CreatorScreen() {
                     <Link href={`/creator/series/${s._id}/edit`} className="btn btn-ghost btn-xs" style={{ textDecoration: "none", flex: "none" }}>
                       <Pencil size={12}/>Edit
                     </Link>
+                    <button onClick={() => deleteSeries(s._id, s.title)} disabled={deleting[s._id]}
+                      className="btn btn-ghost btn-xs" style={{ flex: "none", color: "var(--danger)" }} aria-label="Delete series">
+                      <Trash2 size={12}/>
+                    </button>
                   </div>
                 );
               })}

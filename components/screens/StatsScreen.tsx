@@ -1,10 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Flame, Clock, TrendingUp, MessageCircle, Quote } from "lucide-react";
+import { ArrowLeft, Flame, Clock, TrendingUp, MessageCircle, Quote, Headphones } from "lucide-react";
+import { DnaSlice, Thought } from "@/types";
 import { useApp } from "@/store";
-import { Screen } from "@/components/kit";
-import TopBar from "@/components/shell/TopBar";
+import { Screen, SectionHeader, Cover } from "@/components/kit";
+import TopBar, { CoinGlyph } from "@/components/shell/TopBar";
+import ThoughtCard from "./ThoughtCard";
 
 interface Stats {
   days: { day: string; minutes: number }[];
@@ -13,6 +16,7 @@ interface Stats {
   level: number; levelTitle: string;
   thoughtCount: number; storyCount: number;
 }
+interface RecentItem { _id: string; title: string; coverImage: string; }
 
 function formatDayLabel(dayKey: string): string {
   // dayKey is YYYY-MM-DD (see lib/gamification.ts) — display as a
@@ -25,14 +29,29 @@ export default function StatsScreen() {
   const router = useRouter();
   const user = useApp(s => s.user);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [game, setGame] = useState<{ coins: number; showCount: number } | null>(null);
+  const [dna, setDna] = useState<DnaSlice[]>([]);
+  const [recent, setRecent] = useState<RecentItem[]>([]);
+  const [thoughts, setThoughts] = useState<Thought[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    fetch(`/api/users/${user._id}/listening-stats`)
-      .then(r => r.json())
-      .then(d => { if (!cancelled && !d.error) setStats(d); })
+    Promise.all([
+      fetch(`/api/users/${user._id}/listening-stats`).then(r => r.json()),
+      fetch(`/api/users/${user._id}/gamification`).then(r => r.json()),
+      fetch(`/api/users/${user._id}/dna`).then(r => r.json()),
+      fetch(`/api/thoughts?userId=${user._id}&authorId=${user._id}&limit=10`).then(r => r.json()),
+    ])
+      .then(([s, g, d, t]) => {
+        if (cancelled) return;
+        if (!s.error) setStats(s);
+        if (!g.error) setGame(g);
+        if (Array.isArray(d.dna)) setDna(d.dna);
+        if (Array.isArray(d.recent)) setRecent(d.recent);
+        if (Array.isArray(t)) setThoughts(t);
+      })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
@@ -80,6 +99,32 @@ export default function StatsScreen() {
           </p>
         </div>
 
+        {/* Moved here from the main Profile page — these are all
+            listening-related tallies, so they live alongside the rest
+            of the stats now instead of cluttering the profile header. */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
+          <Link href="/coins" className="card" style={tileStyle}>
+            <span style={{ display: "flex", justifyContent: "center", color: "var(--accent)", marginBottom: 4 }}><CoinGlyph size={15}/></span>
+            <span style={{ display: "block", fontSize: 15, fontWeight: 800, color: "var(--text)" }}>{game ? game.coins.toLocaleString() : "—"}</span>
+            <span style={{ display: "block", fontSize: 10, color: "var(--text3)" }}>Coins</span>
+          </Link>
+          <div className="card" style={tileStyle}>
+            <span style={{ display: "flex", justifyContent: "center", color: "var(--accent)", marginBottom: 4 }}><Flame size={15}/></span>
+            <span style={{ display: "block", fontSize: 15, fontWeight: 800, color: "var(--text)" }}>{stats.streak}</span>
+            <span style={{ display: "block", fontSize: 10, color: "var(--text3)" }}>Streak</span>
+          </div>
+          <Link href="/library" className="card" style={tileStyle}>
+            <span style={{ display: "flex", justifyContent: "center", color: "var(--accent)", marginBottom: 4 }}><Headphones size={15}/></span>
+            <span style={{ display: "block", fontSize: 15, fontWeight: 800, color: "var(--text)" }}>{game ? game.showCount : "—"}</span>
+            <span style={{ display: "block", fontSize: 10, color: "var(--text3)" }}>Shows</span>
+          </Link>
+          <div className="card" style={tileStyle}>
+            <span style={{ display: "flex", justifyContent: "center", color: "var(--accent)", marginBottom: 4 }}><MessageCircle size={15}/></span>
+            <span style={{ display: "block", fontSize: 15, fontWeight: 800, color: "var(--text)" }}>{stats.thoughtCount}</span>
+            <span style={{ display: "block", fontSize: 10, color: "var(--text3)" }}>Thoughts</span>
+          </div>
+        </div>
+
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
           <StatCard icon={<Clock size={15}/>} value={`${stats.todayMinutes}m`} label="Today"/>
           <StatCard icon={<TrendingUp size={15}/>} value={`${stats.weekMinutes}m`} label="This week"/>
@@ -114,10 +159,64 @@ export default function StatsScreen() {
             <StatCard icon={<Quote size={15}/>} value={String(stats.storyCount)} label="Stories & notes" wide/>
           </div>
         </section>
+
+        <section>
+          <SectionHeader title="Listening DNA"/>
+          <div className="card" style={{ padding: 16 }}>
+            {dna.length ? dna.map(d => (
+              <div key={d.genre} style={{ marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 5 }}>
+                  <span style={{ color: "var(--text)", fontWeight: 600 }}>{d.genre}</span>
+                  <span style={{ color: "var(--text3)" }}>{d.percent}%</span>
+                </div>
+                <div className="progress-track"><div className="progress-fill" style={{ width: `${d.percent}%` }}/></div>
+              </div>
+            )) : (
+              <p style={{ fontSize: 12.5, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>
+                Listen to a few episodes and your genre breakdown appears here.
+                It&apos;s weighted by time actually listened, not by what you saved.
+              </p>
+            )}
+          </div>
+        </section>
+
+        {!!recent.length && (
+          <section>
+            <SectionHeader title="Recently played"/>
+            <div className="rail">
+              {recent.map(r => (
+                <Link key={r._id} href={`/series/${r._id}`} style={{ flex: "none", textDecoration: "none", width: 76 }}>
+                  <Cover id={r._id} url={r.coverImage} size={76} radius={16}/>
+                  <span className="truncate" style={{ display: "block", fontSize: 10.5, color: "var(--text3)", marginTop: 6, textAlign: "center" }}>
+                    {r.title}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section>
+          <SectionHeader title="Your thoughts" href="/library"/>
+          {thoughts.length ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {thoughts.map(t => (
+                <ThoughtCard key={t._id} thought={t}
+                  onDeleted={id => setThoughts(prev => prev.filter(x => x._id !== id))}/>
+              ))}
+            </div>
+          ) : (
+            <p style={{ fontSize: 12.5, color: "var(--text3)" }}>
+              Nothing yet — pin one from the player while you listen.
+            </p>
+          )}
+        </section>
       </Screen>
     </>
   );
 }
+
+const tileStyle: React.CSSProperties = { padding: "13px 6px", textAlign: "center", textDecoration: "none", display: "block" };
 
 function StatCard({ icon, value, label, wide }: { icon: React.ReactNode; value: string; label: string; wide?: boolean }) {
   return (

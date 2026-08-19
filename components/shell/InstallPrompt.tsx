@@ -6,7 +6,7 @@ import { registerServiceWorker } from "@/lib/push-client";
 
 const SEEN_KEY = "swara-install-seen";
 
-function isStandalone() {
+export function isStandalone() {
   if (typeof window === "undefined") return false;
   return window.matchMedia?.("(display-mode: standalone)").matches
     || (window.navigator as unknown as { standalone?: boolean }).standalone === true;
