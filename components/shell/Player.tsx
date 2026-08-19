@@ -35,6 +35,10 @@ export default function Player() {
   const showToast = useToast(s => s.show);
 
   const audio = useRef<HTMLAudioElement>(null);
+  // Episodes already counted as "played" this session — a play is
+  // counted once when audio genuinely starts, not on every pause/
+  // resume toggle. See POST /api/episodes/[id]/play.
+  const countedPlays = useRef<Set<string>>(new Set());
   const [expanded, setExpanded] = useState(false);
   const [sleepOpen, setSleepOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -206,6 +210,14 @@ export default function Player() {
         ref={audio}
         onTimeUpdate={() => audio.current && setProgress(audio.current.currentTime)}
         onLoadedMetadata={() => audio.current && setDuration(audio.current.duration || 0)}
+        onPlay={() => {
+          if (!ep || !series || countedPlays.current.has(ep._id)) return;
+          countedPlays.current.add(ep._id);
+          fetch(`/api/episodes/${ep._id}/play`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ seriesId: series._id }),
+          }).catch(() => {});
+        }}
         onEnded={onEnded}
         onError={() => { if (!noAudio) showToast("Couldn't load that audio", "error"); setPlaying(false); }}
         preload="metadata"

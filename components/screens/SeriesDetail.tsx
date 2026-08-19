@@ -25,6 +25,11 @@ export default function SeriesDetail({ seriesId }: { seriesId: string }) {
   const [loading, setLoading] = useState(true);
   const [unlocking, setUnlocking] = useState("");
   const [unlocked, setUnlocked] = useState<string[]>(user?.["unlockedEpisodes" as keyof typeof user] as string[] ?? []);
+  // Optimistic only — not fetched per-episode on load (would mean one
+  // extra request per episode just to find out if you'd liked it
+  // before). Starts empty each visit; the heart still reflects reality
+  // the moment you actually tap it.
+  const [likedEpisodes, setLikedEpisodes] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -74,6 +79,14 @@ export default function SeriesDetail({ seriesId }: { seriesId: string }) {
     if (!isUnlocked(ep)) { showToast(`Unlock this episode for ${UNLOCK_EPISODE_COST} coins`, "info"); return; }
     if (!ep.audioUrl) { showToast("No audio attached to this episode yet", "info"); return; }
     setEp(ep, series);
+    // Player.tsx fires the real POST /api/episodes/[id]/play once audio
+    // actually starts — this just reflects it here immediately rather
+    // than waiting for a refetch of this whole page.
+    setSeries(prev => prev && {
+      ...prev,
+      totalPlays: (prev.totalPlays ?? 0) + 1,
+      episodes: prev.episodes.map(e => e._id === ep._id ? { ...e, playCount: (e.playCount ?? 0) + 1 } : e),
+    });
   };
 
   const unlock = async (ep: Episode) => {
@@ -91,6 +104,51 @@ export default function SeriesDetail({ seriesId }: { seriesId: string }) {
       showToast(`Unlocked · ${d.coins} coins left`, "success");
     } catch { showToast("Network error", "error"); }
     finally { setUnlocking(""); }
+  };
+
+  const toggleEpisodeLike = async (ep: Episode) => {
+    if (!user) { showToast("Log in to like episodes", "info"); return; }
+    if (!series) return;
+    const wasLiked = likedEpisodes.has(ep._id);
+    // Optimistic: flip the heart and nudge the count immediately.
+    setLikedEpisodes(prev => {
+      const next = new Set(prev);
+      if (wasLiked) next.delete(ep._id); else next.add(ep._id);
+      return next;
+    });
+    setSeries(prev => prev && {
+      ...prev,
+      episodes: prev.episodes.map(e => e._id === ep._id
+        ? { ...e, likeCount: (e.likeCount ?? 0) + (wasLiked ? -1 : 1) }
+        : e),
+    });
+    try {
+      const r = await fetch(`/api/episodes/${ep._id}/like`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user._id, seriesId: series._id }),
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      // Reconcile with the server's real count in case of a race.
+      setSeries(prev => prev && {
+        ...prev,
+        episodes: prev.episodes.map(e => e._id === ep._id ? { ...e, likeCount: d.likeCount } : e),
+      });
+    } catch {
+      // Roll back.
+      setLikedEpisodes(prev => {
+        const next = new Set(prev);
+        if (wasLiked) next.add(ep._id); else next.delete(ep._id);
+        return next;
+      });
+      setSeries(prev => prev && {
+        ...prev,
+        episodes: prev.episodes.map(e => e._id === ep._id
+          ? { ...e, likeCount: (e.likeCount ?? 0) + (wasLiked ? 1 : -1) }
+          : e),
+      });
+      showToast("Couldn't save that like", "error");
+    }
   };
 
   const share = async () => {
@@ -229,9 +287,14 @@ export default function SeriesDetail({ seriesId }: { seriesId: string }) {
                       <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
                         <Play size={9} fill="var(--text3)"/>{formatCount(ep.playCount || 0)}
                       </span>
-                      <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                        <Heart size={9} fill="var(--text3)"/>{formatCount(ep.likeCount || 0)}
-                      </span>
+                      <button onClick={e => { e.stopPropagation(); toggleEpisodeLike(ep); }}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 3, background: "none", border: "none",
+                          cursor: "pointer", padding: 0, color: likedEpisodes.has(ep._id) ? "var(--danger)" : "var(--text3)",
+                        }}>
+                        <Heart size={11} fill={likedEpisodes.has(ep._id) ? "var(--danger)" : "none"}/>
+                        {formatCount(ep.likeCount || 0)}
+                      </button>
                     </span>
                   </span>
                   {open ? (
