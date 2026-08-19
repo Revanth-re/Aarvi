@@ -39,6 +39,63 @@ export default function Player() {
   // counted once when audio genuinely starts, not on every pause/
   // resume toggle. See POST /api/episodes/[id]/play.
   const countedPlays = useRef<Set<string>>(new Set());
+
+  // ── Drag-to-reposition the mini bar ──
+  // A pure visual offset (CSS transform) layered on top of whatever
+  // position .dock/.player-bar already computes — dragging never
+  // changes layout flow, so it can't break the floating-pill stacking
+  // built for the mobile nav dock. Resets to the docked position
+  // whenever a fresh episode loads (this component remounts).
+  const [dragPos, setDragPos] = useState({ x: 0, y: 0 });
+  const dragBarRef = useRef<HTMLDivElement>(null);
+  const dragInfo = useRef<{
+    startX: number; startY: number; origX: number; origY: number;
+    baseLeft: number; baseTop: number; width: number; height: number; moved: boolean;
+  } | null>(null);
+
+  const onDragPointerDown = (e: React.PointerEvent) => {
+    const el = dragBarRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    dragInfo.current = {
+      startX: e.clientX, startY: e.clientY, origX: dragPos.x, origY: dragPos.y,
+      // The rect already reflects any existing drag offset — subtract
+      // it back out to get the bar's natural (undragged) position, so
+      // clamping math stays correct no matter where a previous drag
+      // left it.
+      baseLeft: rect.left - dragPos.x, baseTop: rect.top - dragPos.y,
+      width: rect.width, height: rect.height, moved: false,
+    };
+    el.setPointerCapture(e.pointerId);
+  };
+  const onDragPointerMove = (e: React.PointerEvent) => {
+    const info = dragInfo.current;
+    if (!info) return;
+    const dx = e.clientX - info.startX;
+    const dy = e.clientY - info.startY;
+    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) info.moved = true;
+    if (!info.moved) return;
+
+    const margin = 8;
+    const minX = margin - info.baseLeft;
+    const maxX = window.innerWidth - info.width - margin - info.baseLeft;
+    const minY = margin - info.baseTop;
+    const maxY = window.innerHeight - info.height - margin - info.baseTop;
+
+    setDragPos({
+      x: Math.min(maxX, Math.max(minX, info.origX + dx)),
+      y: Math.min(maxY, Math.max(minY, info.origY + dy)),
+    });
+  };
+  const onDragPointerUp = () => { /* dragInfo cleared in the click-capture guard below, once its "moved" flag has been read */ };
+  // Swallows the click that would otherwise open the full player right
+  // after a drag — a drag ending under the cursor still fires a native
+  // click, and without this a drag-release would also pop the player
+  // open.
+  const onDragClickCapture = (e: React.MouseEvent) => {
+    if (dragInfo.current?.moved) { e.stopPropagation(); e.preventDefault(); }
+    dragInfo.current = null;
+  };
   const [expanded, setExpanded] = useState(false);
   const [sleepOpen, setSleepOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -223,8 +280,22 @@ export default function Player() {
         preload="metadata"
       />
 
-      {/* ── Mini bar, floats directly above the tab bar ── */}
-      <div className="player-bar" style={{ background: "var(--bg2)" }}>
+      {/* ── Mini bar, floats directly above the tab bar — draggable
+          anywhere on screen; tap (no drag) still opens the full player. ── */}
+      <div
+        ref={dragBarRef}
+        className="player-bar"
+        style={{
+          background: "var(--bg2)",
+          transform: (dragPos.x || dragPos.y) ? `translate(${dragPos.x}px, ${dragPos.y}px)` : undefined,
+          touchAction: "none", cursor: "grab",
+        }}
+        onPointerDown={onDragPointerDown}
+        onPointerMove={onDragPointerMove}
+        onPointerUp={onDragPointerUp}
+        onPointerCancel={onDragPointerUp}
+        onClickCapture={onDragClickCapture}
+      >
         <div className="progress-track" style={{ height: 2, borderRadius: 0 }}>
           <div className="progress-fill" style={{ width: `${pct}%`, borderRadius: 0 }}/>
         </div>

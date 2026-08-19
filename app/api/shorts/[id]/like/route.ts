@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { ShortModel } from "@/models/Short";
 import { UserModel } from "@/models/User";
+import { notifyAndPush } from "@/lib/notify";
 
 type P = { params: Promise<{ id: string }> };
 
@@ -26,6 +27,23 @@ export async function POST(req: NextRequest, { params }: P) {
     // Lifetime counter only ever goes up — un-liking shouldn't be able
     // to revoke progress the user already earned.
     if (!had) await UserModel.findByIdAndUpdate(userId, { $inc: { shortsLiked: 1 } });
+
+    // Notify the creator on a new like only (never on unlike, never on
+    // liking your own short).
+    if (!had && short.creatorId && short.creatorId !== userId) {
+      const liker = await UserModel.findById(userId).select("name").lean<{ name?: string }>();
+      await notifyAndPush(short.creatorId, {
+        type: "short_liked",
+        category: "social",
+        title: `${liker?.name || "Someone"} liked your short`,
+        message: "",
+        link: "/shorts",
+        fromUserId: userId,
+        fromUserName: liker?.name,
+        toggle: "likes",
+        pushUrl: "/shorts",
+      });
+    }
 
     return NextResponse.json({ liked: !had, likeCount: short.likedBy.length });
   } catch (e) {

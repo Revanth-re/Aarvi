@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { SeriesModel } from "@/models/Series";
 import { EpisodeLikeModel } from "@/models/EpisodeLike";
+import { UserModel } from "@/models/User";
+import { notifyAndPush } from "@/lib/notify";
 
 type P = { params: Promise<{ id: string }> };
 
@@ -52,6 +54,29 @@ export async function POST(req: NextRequest, { params }: P) {
       { _id: seriesId, "episodes._id": episodeId },
       { $set: { "episodes.$.likeCount": likeCount } }
     );
+
+    // Notify the creator on a new like only (never on unlike, never on
+    // liking your own episode).
+    if (!existing) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const series = await SeriesModel.findById(seriesId).select("title creatorId episodes._id episodes.title").lean<any>();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const epTitle = (series?.episodes || []).find((e: any) => e._id.toString() === episodeId)?.title;
+      if (series?.creatorId && series.creatorId !== userId) {
+        const liker = await UserModel.findById(userId).select("name").lean<{ name?: string }>();
+        await notifyAndPush(series.creatorId, {
+          type: "episode_liked",
+          category: "social",
+          title: `${liker?.name || "Someone"} liked "${epTitle || "your episode"}"`,
+          message: "",
+          link: `/series/${seriesId}`,
+          fromUserId: userId,
+          fromUserName: liker?.name,
+          toggle: "likes",
+          pushUrl: `/series/${seriesId}`,
+        });
+      }
+    }
 
     return NextResponse.json({ liked: !existing, likeCount });
   } catch (e) {

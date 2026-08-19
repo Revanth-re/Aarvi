@@ -56,7 +56,7 @@ function isWithinQuietHours(now: string, start: string, end: string): boolean {
 
 const NOTIF_TOGGLE_KEYS = [
   "episodeDrops", "creatorStories", "coinRewards", "thoughtReplies",
-  "weeklyRecap", "newMessages", "follows", "tips", "storyUpdates",
+  "weeklyRecap", "newMessages", "follows", "tips", "storyUpdates", "likes",
 ] as const;
 type NotifToggle = (typeof NOTIF_TOGGLE_KEYS)[number];
 

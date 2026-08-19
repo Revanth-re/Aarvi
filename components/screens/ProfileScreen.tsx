@@ -8,6 +8,7 @@ import { gradientFor } from "@/lib/gamification";
 import { Screen, EmptyState } from "@/components/kit";
 import TopBar from "@/components/shell/TopBar";
 import Avatar from "@/components/ui/Avatar";
+import ProfilePhotoViewer from "./ProfilePhotoViewer";
 
 /* eslint-disable @next/next/no-img-element */
 
@@ -38,6 +39,7 @@ export default function ProfileScreen() {
   const [followingCount, setFollowingCount] = useState(cached?.followingCount ?? 0);
   const [posts, setPosts] = useState<Series[]>(cached?.posts ?? []);
   const [loaded, setLoaded] = useState(!!cached);
+  const [photoOpen, setPhotoOpen] = useState(false);
   // Not part of the seeded/cached payload — this is only ever a small
   // badge count, cheap enough to refetch each visit rather than store.
   const [requestCount, setRequestCount] = useState(0);
@@ -92,7 +94,10 @@ export default function ProfileScreen() {
       <Screen>
         {/* ── Header ── */}
         <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-          <Avatar name={user.name} image={user.image} size={72}/>
+          <button onClick={() => setPhotoOpen(true)} aria-label="View profile photo"
+            style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", flex: "none" }}>
+            <Avatar name={user.name} image={user.image} size={72}/>
+          </button>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div className="truncate" style={{ fontSize: 17, fontWeight: 700, color: "var(--text)" }}>
               {user.name || "Listener"}
@@ -184,6 +189,8 @@ export default function ProfileScreen() {
           )}
         </div>
       </Screen>
+
+      <ProfilePhotoViewer open={photoOpen} onClose={() => setPhotoOpen(false)} image={user.image} name={user.name}/>
     </>
   );
 }

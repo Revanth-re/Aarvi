@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { UserModel } from "@/models/User";
+import { SeriesModel } from "@/models/Series";
+import { notifyAndPush } from "@/lib/notify";
 
 type P = { params: Promise<{ id: string }> };
 
@@ -33,6 +35,25 @@ export async function POST(req: NextRequest, { params }: P) {
       user.favorites = [...(user.favorites || []), seriesId];
     }
     await user.save();
+
+    // Notify the creator on a new save, never on un-saving, and never
+    // when someone saves their own series.
+    if (!has) {
+      const series = await SeriesModel.findById(seriesId).select("title creatorId").lean<{ title?: string; creatorId?: string }>();
+      if (series?.creatorId && series.creatorId !== id) {
+        await notifyAndPush(series.creatorId, {
+          type: "series_saved",
+          category: "social",
+          title: `${user.name || "Someone"} saved "${series.title}"`,
+          message: "",
+          link: `/series/${seriesId}`,
+          fromUserId: id,
+          fromUserName: user.name,
+          toggle: "likes",
+          pushUrl: `/series/${seriesId}`,
+        });
+      }
+    }
 
     return NextResponse.json({ favorites: user.favorites });
   } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }

@@ -19,7 +19,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   notif: {
     episodeDrops: true, creatorStories: true, coinRewards: true,
     thoughtReplies: true, weeklyRecap: false, newMessages: true,
-    follows: true, tips: true, storyUpdates: true,
+    follows: true, tips: true, storyUpdates: true, likes: true,
   },
   quietHours: { enabled: false, start: "22:00", end: "07:00" },
   playback: {

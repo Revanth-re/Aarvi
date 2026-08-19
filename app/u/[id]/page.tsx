@@ -10,6 +10,7 @@ import { gradientFor } from "@/lib/gamification";
 import TopBar from "@/components/shell/TopBar";
 import { UserPlus, UserCheck, Clock, MessageCircle, Disc3, Eye } from "lucide-react";
 import { Series } from "@/types";
+import ProfilePhotoViewer from "@/components/screens/ProfilePhotoViewer";
 
 /* eslint-disable @next/next/no-img-element */
 
@@ -38,6 +39,7 @@ export default function PublicProfilePage() {
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [messaging, setMessaging] = useState(false);
+  const [photoOpen, setPhotoOpen] = useState(false);
 
   const isSelf = !!user && id === user._id;
 
@@ -132,7 +134,10 @@ export default function PublicProfilePage() {
         )}
 
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <Avatar name={profile.name} image={profile.image} size={72}/>
+          <button onClick={() => setPhotoOpen(true)} aria-label="View profile photo"
+            style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", flex: "none" }}>
+            <Avatar name={profile.name} image={profile.image} size={72}/>
+          </button>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div className="truncate" style={{ fontSize: 17, fontWeight: 700, color: "var(--text)" }}>{profile.name}</div>
             {profile.handle && (
@@ -223,6 +228,8 @@ export default function PublicProfilePage() {
           </div>
         )}
       </Screen>
+
+      <ProfilePhotoViewer open={photoOpen} onClose={() => setPhotoOpen(false)} image={profile.image} name={profile.name}/>
     </>
   );
 }

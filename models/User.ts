@@ -28,6 +28,7 @@ const SettingsSchema = new Schema({
     follows:        { type: Boolean, default: true },
     tips:           { type: Boolean, default: true },
     storyUpdates:   { type: Boolean, default: true },
+    likes:          { type: Boolean, default: true },
   },
   // Push is suppressed (in-app notification still written) between
   // start and end, local "HH:mm" 24h time. See notifyAndPush().

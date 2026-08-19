@@ -1,7 +1,7 @@
 "use client";
 import { Fragment, Suspense, useEffect, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, Send, MessageSquare, Smile, Paperclip, X, Loader2, Check, CheckCheck } from "lucide-react";
+import { ArrowLeft, Send, MessageSquare, Paperclip, X, Loader2, Check, CheckCheck } from "lucide-react";
 import { Conversation, MessageItem, MessageAttachment } from "@/types";
 import { useApp, useToast } from "@/store";
 import { creatorFetch } from "@/lib/creatorFetch";
@@ -11,15 +11,6 @@ import TopBar from "@/components/shell/TopBar";
 import Avatar from "@/components/ui/Avatar";
 
 /* eslint-disable @next/next/no-img-element */
-
-// A small fixed palette rather than a full emoji library/GIF-search
-// API — no new dependency or API key needed, and it covers the common
-// reactions people actually reach for in a DM.
-const EMOJIS = [
-  "😀","😂","🥰","😍","😅","😊","😉","😎","🤔","😴",
-  "😢","😭","😡","🥳","👍","👎","👏","🙏","💪","🔥",
-  "❤️","💔","✨","🎉","🎵","🎧","😘","🤗","😱","👀",
-];
 
 // useSearchParams (used to support /messages?with=<userId>, opening a
 // thread directly from someone's profile) requires a Suspense boundary
@@ -47,7 +38,6 @@ function MessagesScreenInner() {
   const [reloadKey, setReloadKey] = useState(0);
   // Bumped after sending, to re-run the thread fetch.
   const [threadKey, setThreadKey] = useState(0);
-  const [showEmoji, setShowEmoji] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState<MessageAttachment | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -118,7 +108,6 @@ function MessagesScreenInner() {
       setMessages(prev => [...prev, d.message]);
       setDraft("");
       setPendingAttachment(null);
-      setShowEmoji(false);
       setReloadKey(k => k + 1);
       setThreadKey(k => k + 1);
     } catch {
@@ -175,8 +164,12 @@ function MessagesScreenInner() {
             (which reserves that space via padding), so without it the
             input row's own bottom-nav-height margin below pushed the
             whole column taller than the actual visible viewport,
-            shoving the input bar down under/behind the fixed nav. */}
-        <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - var(--topbar-h) - var(--nav-h))" }}>
+            shoving the input bar down under/behind the fixed nav.
+            Also subtracts --nav-float-gap: the nav floats up off the
+            screen edge by that much (see .dock in globals.css), so its
+            real footprint is taller than --nav-h alone — without this
+            the composer's bottom few pixels sat behind the nav. */}
+        <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - var(--topbar-h) - var(--nav-h) - var(--nav-float-gap))" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
             <button onClick={() => setOpenWith(null)} aria-label="Back"
               style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text2)", display: "flex" }}>
@@ -263,20 +256,6 @@ function MessagesScreenInner() {
             borderTop: "1px solid var(--border)",
             paddingBottom: "env(safe-area-inset-bottom, 0px)",
           }}>
-            {showEmoji && (
-              <div style={{
-                display: "grid", gridTemplateColumns: "repeat(10,1fr)", gap: 2,
-                padding: "10px 12px 4px", borderBottom: "1px solid var(--border)",
-              }}>
-                {EMOJIS.map(e => (
-                  <button key={e} onClick={() => setDraft(d => d + e)} aria-label={`Insert ${e}`}
-                    style={{ background: "none", border: "none", cursor: "pointer", fontSize: 19, padding: 4, lineHeight: 1 }}>
-                    {e}
-                  </button>
-                ))}
-              </div>
-            )}
-
             {(pendingAttachment || uploading) && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px 0" }}>
                 {uploading ? (
@@ -309,10 +288,6 @@ function MessagesScreenInner() {
               <button onClick={() => fileRef.current?.click()} disabled={uploading} aria-label="Attach photo or video"
                 style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text2)", display: "flex", flex: "none", padding: 6 }}>
                 <Paperclip size={19}/>
-              </button>
-              <button onClick={() => setShowEmoji(v => !v)} aria-label="Emoji"
-                style={{ background: "none", border: "none", cursor: "pointer", color: showEmoji ? "var(--accent)" : "var(--text2)", display: "flex", flex: "none", padding: 6 }}>
-                <Smile size={19}/>
               </button>
               <input className="inp" value={draft} onChange={e => setDraft(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}

@@ -164,6 +164,8 @@ export interface UserSettings {
      *  follow — the three additional push triggers from the
      *  Notifications & Privacy settings page (see /settings/notifications). */
     follows: boolean; tips: boolean; storyUpdates: boolean;
+    /** Someone liked/saved one of your series, episodes, or shorts. */
+    likes: boolean;
   };
   /** Push notifications are suppressed (but the in-app notification is
    *  still written) between start and end, both "HH:mm" 24h local time.
