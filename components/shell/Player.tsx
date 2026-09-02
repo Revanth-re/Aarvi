@@ -270,9 +270,12 @@ export default function Player() {
         onPlay={() => {
           if (!ep || !series || countedPlays.current.has(ep._id)) return;
           countedPlays.current.add(ep._id);
+          // The server does the real per-user de-dup (see the route) —
+          // this ref just avoids re-firing the request on every pause/
+          // resume within one continuous playback session.
           fetch(`/api/episodes/${ep._id}/play`, {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ seriesId: series._id }),
+            body: JSON.stringify({ seriesId: series._id, userId: user?._id }),
           }).catch(() => {});
         }}
         onEnded={onEnded}
