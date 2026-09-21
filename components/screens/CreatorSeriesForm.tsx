@@ -16,7 +16,7 @@ import CreditsEditor from "./CreditsEditor";
 const GENRES = [
   "Thriller", "Mythology", "Romance", "Horror", "Comedy",
   "Coming of Age", "Mystery", "Drama", "Fantasy", "True Crime",
-  "Devotional", "Friendship",
+  "Devotional", "Friendship", "Love",
 ];
 
 const MAX_NARRATION_CHARS = 6000;

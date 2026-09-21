@@ -160,26 +160,36 @@ function PostStorySheet({
   const [kind, setKind] = useState<StoryKind>("quote");
   const [caption, setCaption] = useState("");
   const [mediaUrl, setMediaUrl] = useState("");
-  const [hidden, setHidden] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  const upload = async (file: File) => {
+  // Multiple files → one story per file, posted immediately (no
+  // separate "attach then post" step needed for a batch).
+  const uploadMultiple = async (files: FileList) => {
+    if (!user) return;
     setUploading(true);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      // Needs creatorFetch, not a bare fetch — /api/upload requires an
-      // x-user-id header to know who's uploading (see requireUser).
-      const r = await creatorFetch("/api/upload", { method: "POST", body: fd });
-      const d = await r.json();
-      if (!r.ok || !d.url) throw new Error(d.error || "Upload failed");
-      setMediaUrl(d.url);
-      showToast("Uploaded", "success");
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : "Upload failed", "error");
-    } finally {
-      setUploading(false);
+    let count = 0;
+    for (const file of Array.from(files)) {
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        const r = await creatorFetch("/api/upload", { method: "POST", body: fd });
+        const d = await r.json();
+        if (!r.ok || !d.url) continue;
+        const p = await fetch("/api/stories", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: user._id, kind, caption, mediaUrl: d.url }),
+        });
+        if (p.ok) count++;
+      } catch { /* skip this file, keep going with the rest */ }
+    }
+    setUploading(false);
+    if (count) {
+      showToast(`Posted ${count} ${count === 1 ? "story" : "stories"}`, "success");
+      setCaption(""); setMediaUrl("");
+      onPosted(); onClose();
+    } else {
+      showToast("Couldn't upload", "error");
     }
   };
 
@@ -190,12 +200,12 @@ function PostStorySheet({
       const r = await fetch("/api/stories", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user._id, kind, caption, mediaUrl, hidden }),
+        body: JSON.stringify({ userId: user._id, kind, caption, mediaUrl }),
       });
       const d = await r.json();
       if (!r.ok || d.error) { showToast(d.error || "Couldn't post", "error"); return; }
-      showToast(hidden ? "Story posted — only visible to you" : "Story posted — live for 24 hours", "success");
-      setCaption(""); setMediaUrl(""); setHidden(false);
+      showToast("Story posted — live for 24 hours", "success");
+      setCaption(""); setMediaUrl("");
       onPosted();
     } catch {
       showToast("Network error", "error");
@@ -240,28 +250,18 @@ function PostStorySheet({
             type="file"
             accept={kind === "audio" ? "audio/*" : "image/*"}
             hidden
-            onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); }}
+            multiple
+            onChange={e => { const files = e.target.files; if (files?.length) uploadMultiple(files); }}
           />
-          {uploading ? "Uploading…" : mediaUrl ? "✓ File attached — tap to replace" : `Choose ${kind === "audio" ? "an audio clip" : "a photo"}`}
+          {uploading ? "Uploading…" : `Choose ${kind === "audio" ? "audio clips" : "photos"} — pick multiple at once`}
         </label>
       )}
 
-      <label style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        gap: 12, padding: "10px 2px", marginBottom: 12, cursor: "pointer",
-      }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text2)" }}>
-          <EyeOff size={15}/>Hide from followers (only you can see it)
-        </span>
-        <span className="toggle">
-          <input type="checkbox" checked={hidden} onChange={e => setHidden(e.target.checked)}/>
-          <span className="toggle-track"/>
-        </span>
-      </label>
-
-      <button onClick={post} disabled={busy || uploading} className="btn btn-primary" style={{ width: "100%" }}>
-        {busy ? "Posting…" : "Post story"}
-      </button>
+      {kind === "quote" && (
+        <button onClick={post} disabled={busy} className="btn btn-primary" style={{ width: "100%" }}>
+          {busy ? "Posting…" : "Post story"}
+        </button>
+      )}
       <p style={{ fontSize: 11, color: "var(--text3)", textAlign: "center", marginTop: 10 }}>
         Stories disappear after 24 hours.
       </p>

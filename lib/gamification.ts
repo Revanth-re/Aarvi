@@ -261,6 +261,7 @@ const GENRE_COLORS: Record<string, [string, string]> = {
   "Campus":         ["#06B6D4", "#3B82F6"],
   "Devotional":     ["#EAB308", "#CA8A04"],
   "Friendship":     ["#F0563C", "#C94BA0"],
+  "Love":           ["#FB7185", "#E11D48"],
 };
 
 export function genreColor(genre: string): string {

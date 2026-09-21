@@ -13,7 +13,7 @@ import Avatar from "@/components/ui/Avatar";
 const GENRES = [
   "Thriller", "Romance", "Mythology", "Horror", "Mystery",
   "Comedy", "Sci-Fi", "Coming of Age", "True Crime", "Campus",
-  "Devotional", "Friendship",
+  "Devotional", "Friendship", "Love",
 ];
 
 export default function SearchScreen() {

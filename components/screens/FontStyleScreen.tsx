@@ -10,14 +10,10 @@ import TopBar from "@/components/shell/TopBar";
 // globals.css — used here so each preview card renders in its own
 // font regardless of which one is currently applied app-wide.
 const STACKS: Record<FontStyle, string> = {
-  sora:        "'Sora', system-ui, -apple-system, sans-serif",
-  neo:         "'Space Grotesk', system-ui, -apple-system, sans-serif",
-  slab:        "'Roboto Slab', Georgia, serif",
-  rounded:     "'Baloo 2', system-ui, -apple-system, sans-serif",
-  serif:       "'Lora', Georgia, serif",
-  playful:     "'Fredoka', system-ui, -apple-system, sans-serif",
-  handwritten: "'Caveat', cursive, system-ui, sans-serif",
-  retro:       "'Righteous', system-ui, -apple-system, sans-serif",
+  sora:    "'Sora', system-ui, -apple-system, sans-serif",
+  serif:   "'Lora', Georgia, serif",
+  playful: "'Fredoka', system-ui, -apple-system, sans-serif",
+  retro:   "'Righteous', system-ui, -apple-system, sans-serif",
 };
 
 export default function FontStyleScreen() {

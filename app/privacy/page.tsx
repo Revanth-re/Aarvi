@@ -107,6 +107,10 @@ export default function PrivacyPolicyPage() {
             <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: "var(--accent)" }}>{CONTACT_EMAIL}</a>.
           </p>
         </Section>
+
+        <p style={{ textAlign: "center", fontSize: 11.5, color: "var(--text3)", margin: "8px 0 0" }}>
+          Powered by Vaishnavi Srinivas
+        </p>
       </div>
     </Screen>
   );

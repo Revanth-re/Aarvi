@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { PlayCircle, Gift, Users, Flame, ArrowUpRight, ArrowDownRight, Info } from "lucide-react";
+import { PlayCircle, Gift, Users, Flame, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { WalletState } from "@/types";
 import { useApp, useToast } from "@/store";
 import { timeAgo } from "@/lib/gamification";
@@ -49,6 +49,63 @@ export default function CoinsScreen() {
       if (!r.ok || d.error) { showToast(d.detail || d.error || "Couldn't do that", "info"); return; }
       showToast(`+${d.granted} coins${label ? ` · ${label}` : ""}`, "success");
       reload();
+    } catch {
+      showToast("Network error", "error");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  // Loads Razorpay's checkout script once, on demand.
+  const loadRazorpay = () => new Promise<boolean>(resolve => {
+    if ((window as unknown as { Razorpay?: unknown }).Razorpay) { resolve(true); return; }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+
+  const buyPack = async (packKey: string) => {
+    if (!user) { showToast("Log in first", "info"); return; }
+    setBusy(`buy-${packKey}`);
+    try {
+      const ok = await loadRazorpay();
+      if (!ok) { showToast("Couldn't load payment gateway", "error"); return; }
+
+      const or = await fetch("/api/coins/razorpay/order", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ packKey }),
+      });
+      const order = await or.json();
+      if (!or.ok || order.error) { showToast(order.error || "Couldn't start payment", "error"); return; }
+
+      interface RazorpaySuccess { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string; }
+      type RazorpayCtor = new (opts: Record<string, unknown>) => { open: () => void };
+      const RazorpayCtor = (window as unknown as { Razorpay: RazorpayCtor }).Razorpay;
+      const rzp = new RazorpayCtor({
+        key: order.keyId, amount: order.amount, currency: order.currency,
+        name: "SWARA FM", description: "Coin top-up", order_id: order.orderId,
+        prefill: { name: user.name, email: user.email },
+        theme: { color: "#8B5CF6" },
+        handler: async (resp: RazorpaySuccess) => {
+          const vr = await fetch("/api/coins/razorpay/verify", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: user._id, packKey,
+              razorpay_order_id: resp.razorpay_order_id,
+              razorpay_payment_id: resp.razorpay_payment_id,
+              razorpay_signature: resp.razorpay_signature,
+            }),
+          });
+          const vd = await vr.json();
+          if (!vr.ok || vd.error) { showToast(vd.error || "Payment couldn't be verified", "error"); return; }
+          showToast(`+${vd.coins} coins added!`, "success");
+          reload();
+        },
+        modal: { ondismiss: () => setBusy("") },
+      });
+      rzp.open();
     } catch {
       showToast("Network error", "error");
     } finally {
@@ -158,20 +215,9 @@ export default function CoinsScreen() {
         <section>
           <h2 style={sectionH2}>Buy coins</h2>
 
-          {!demoMode && (
-            <div style={noteBox}>
-              <Info size={15} color="var(--warning)" style={{ flexShrink: 0, marginTop: 1 }}/>
-              <span>
-                Payments aren&apos;t connected, so these packs can&apos;t be bought yet.
-                Coins are only granted through a verified payment webhook — set
-                <code style={{ margin: "0 4px" }}>DEMO_WALLET=true</code> to test the flow.
-              </span>
-            </div>
-          )}
-
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             {(w?.packs ?? []).map(p => (
-              <button key={p.key} onClick={() => act("buy", { packKey: p.key })}
+              <button key={p.key} onClick={() => buyPack(p.key)}
                 disabled={!!busy} className="card"
                 style={{ padding: 14, textAlign: "left", cursor: "pointer" }}>
                 <span style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--coin)" }}>
@@ -266,11 +312,4 @@ function EarnRow({
 
 const sectionH2: React.CSSProperties = {
   fontSize: 17, fontWeight: 700, color: "var(--text)", margin: "0 0 12px",
-};
-const noteBox: React.CSSProperties = {
-  display: "flex", gap: 8, alignItems: "flex-start",
-  background: "color-mix(in srgb, var(--warning) 12%, transparent)",
-  border: "1px solid color-mix(in srgb, var(--warning) 32%, transparent)",
-  borderRadius: 12, padding: 12, marginBottom: 12,
-  fontSize: 12, color: "var(--text2)", lineHeight: 1.6,
 };

@@ -8,6 +8,7 @@ import SettingsSync from "./SettingsSync";
 import Player from "./Player";
 import ListeningTracker from "./ListeningTracker";
 import InstallPrompt from "./InstallPrompt";
+import QuoteFab from "./QuoteFab";
 import { registerServiceWorker } from "@/lib/push-client";
 
 export default function ClientRoot({ children }: { children: React.ReactNode }) {
@@ -47,6 +48,7 @@ export default function ClientRoot({ children }: { children: React.ReactNode }) 
       )}
       <ToastHost/>
       {!isAdmin && <InstallPrompt/>}
+      {!isAdmin && <QuoteFab/>}
     </>
   );
 }

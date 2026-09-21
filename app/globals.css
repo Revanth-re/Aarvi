@@ -154,12 +154,8 @@
    Applied as data-font="<key>" on <html>, independent of data-theme.
    Google Fonts loaded once in app/layout.tsx. */
 :root, [data-font="sora"]      { --ff-sans: 'Sora', system-ui, -apple-system, sans-serif; }
-[data-font="neo"]              { --ff-sans: 'Space Grotesk', system-ui, -apple-system, sans-serif; }
-[data-font="slab"]             { --ff-sans: 'Roboto Slab', Georgia, serif; }
-[data-font="rounded"]          { --ff-sans: 'Baloo 2', system-ui, -apple-system, sans-serif; }
 [data-font="serif"]            { --ff-sans: 'Lora', Georgia, serif; }
 [data-font="playful"]          { --ff-sans: 'Fredoka', system-ui, -apple-system, sans-serif; }
-[data-font="handwritten"]      { --ff-sans: 'Caveat', cursive, system-ui, sans-serif; }
 [data-font="retro"]            { --ff-sans: 'Righteous', system-ui, -apple-system, sans-serif; }
 
 @layer base {

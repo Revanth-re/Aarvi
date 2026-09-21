@@ -9,7 +9,7 @@ const SettingsSchema = new Schema({
   themeColor:  { type: String, enum: ["lavender","rosegold","mint","cyberblue","peach","midnight"], default: "lavender" },
   themeMode:   { type: String, enum: ["light","dark","system"], default: "light" },
   tabBarStyle: { type: String, enum: ["transparent","normal"], default: "transparent" },
-  fontStyle:   { type: String, enum: ["sora","neo","slab","rounded","serif","playful","handwritten","retro"], default: "sora" },
+  fontStyle:   { type: String, enum: ["sora","serif","playful","retro"], default: "sora" },
 
   notif: {
     episodeDrops:   { type: Boolean, default: true },

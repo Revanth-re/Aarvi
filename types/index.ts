@@ -52,17 +52,13 @@ export const THEME_COLORS: { key: ThemeColor; label: string; dot: string }[] = [
 // Applied app-wide as data-font="<key>" on <html>, same pattern as
 // data-theme. "sora" is the original single font the app shipped
 // with, kept as the default so nobody's UI changes underneath them.
-export type FontStyle = "sora" | "neo" | "slab" | "rounded" | "serif" | "playful" | "handwritten" | "retro";
+export type FontStyle = "sora" | "serif" | "playful" | "retro";
 
 export const FONT_STYLES: { key: FontStyle; label: string; sub: string; preview: string }[] = [
-  { key: "sora",        label: "Default",     sub: "Sora — clean & modern",        preview: "Aa" },
-  { key: "neo",         label: "Neo",         sub: "Space Grotesk — geometric",     preview: "Aa" },
-  { key: "slab",        label: "Slab",        sub: "Roboto Slab — bold & sturdy",   preview: "Aa" },
-  { key: "rounded",     label: "Rounded",     sub: "Baloo 2 — soft & friendly",     preview: "Aa" },
-  { key: "serif",       label: "Serif",       sub: "Lora — warm & literary",        preview: "Aa" },
-  { key: "playful",     label: "Playful",     sub: "Fredoka — bouncy & fun",        preview: "Aa" },
-  { key: "handwritten", label: "Handwritten", sub: "Caveat — personal & casual",    preview: "Aa" },
-  { key: "retro",       label: "Retro",       sub: "Righteous — bold & poster-like", preview: "Aa" },
+  { key: "sora",    label: "Default", sub: "Sora — clean & modern",        preview: "Aa" },
+  { key: "serif",   label: "Serif",   sub: "Lora — warm & literary",       preview: "Aa" },
+  { key: "playful", label: "Playful", sub: "Fredoka — bouncy & fun",       preview: "Aa" },
+  { key: "retro",   label: "Retro",   sub: "Righteous — bold & poster-like", preview: "Aa" },
 ];
 
 // ══════════════════════════════════════════════════════════
