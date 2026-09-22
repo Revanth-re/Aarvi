@@ -32,7 +32,7 @@ const StoryRefSchema = new Schema({
 // real video files (mp4/webm/etc.) get "video" and a <video> tag.
 const AttachmentSchema = new Schema({
   url:  { type: String, required: true },
-  kind: { type: String, enum: ["image", "video"], required: true },
+  kind: { type: String, enum: ["image", "video", "audio"], required: true },
 }, { _id: false });
 
 const MessageSchema = new Schema({

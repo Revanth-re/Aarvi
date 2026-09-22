@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { useApp } from "@/store";
-import { Radio, LayoutDashboard, Headphones, ShoppingBag, ExternalLink, Menu, X, ChevronRight, ShieldAlert, Clapperboard } from "lucide-react";
+import { Radio, LayoutDashboard, Headphones, ShoppingBag, ExternalLink, Menu, X, ChevronRight, ShieldAlert, Clapperboard, Wallet } from "lucide-react";
 import { isAdminEmail } from "@/lib/admin";
 
 const NAV = [
@@ -11,6 +11,7 @@ const NAV = [
   { href: "/admin/series",  label: "Audio Series", icon: Headphones },
   { href: "/admin/shorts",  label: "Shorts",       icon: Clapperboard },
   { href: "/admin/products",label: "Products",     icon: ShoppingBag },
+  { href: "/admin/upi-claims", label: "UPI Payments", icon: Wallet },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

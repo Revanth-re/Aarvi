@@ -92,6 +92,13 @@ const UserSchema = new Schema({
   email:    { type: String, unique: true, sparse: true },
   name:     { type: String },
   image:    { type: String },
+  lastSeenAt: { type: Date },
+  note: {
+    text: { type: String, maxlength: 60 }, bg: { type: String },
+    musicUrl: { type: String }, musicName: { type: String }, musicStart: Number, musicEnd: Number,
+    ep: { seriesId: String, seriesTitle: String, episodeId: String, title: String, cover: String, audioUrl: String, start: Number, end: Number },
+    at: { type: Date },
+  },
 
   // ─── Username/mobile + password login (alongside Google) ───
   /** E.164-ish digits, no formatting. Sparse-unique like handle/email. */

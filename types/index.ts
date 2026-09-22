@@ -376,7 +376,7 @@ export interface StoryRef {
   storyId: string; kind: StoryKind; mediaUrl: string; caption: string;
 }
 export interface MessageAttachment {
-  url: string; kind: "image" | "video";
+  url: string; kind: "image" | "video" | "audio";
 }
 export interface MessageItem {
   _id: string; conversationId: string; senderId: string;
@@ -388,7 +388,7 @@ export interface MessageItem {
 }
 export interface Conversation {
   _id: string;
-  participants: { _id: string; name: string; handle: string; image: string }[];
+  participants: { _id: string; name: string; handle: string; image: string; lastSeenAt?: string; note?: UserNote }[];
   lastMessage?: MessageItem;
   unread: number;
   updatedAt: string;
@@ -428,4 +428,9 @@ export interface Report {
   reviewedBy?: string;
   reviewedAt?: string;
   createdAt: string;
+}
+
+export interface UserNote {
+  text?: string; bg?: string; musicUrl?: string; musicName?: string; musicStart?: number; musicEnd?: number;
+  ep?: { seriesId: string; seriesTitle: string; episodeId: string; title: string; cover?: string; audioUrl?: string; start: number; end?: number };
 }

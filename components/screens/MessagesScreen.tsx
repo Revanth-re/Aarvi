@@ -2,13 +2,43 @@
 import { Fragment, Suspense, useEffect, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Send, MessageSquare, Paperclip, X, Loader2, Check, CheckCheck } from "lucide-react";
-import { Conversation, MessageItem, MessageAttachment } from "@/types";
+import { Conversation, MessageItem, MessageAttachment, UserNote } from "@/types";
+import { NoteBubble, NoteComposer, NoteViewer } from "@/components/screens/NoteSheets";
 import { useApp, useToast } from "@/store";
 import { creatorFetch } from "@/lib/creatorFetch";
 import { timeAgo, clockTime, dayLabel } from "@/lib/gamification";
 import { Screen, EmptyState } from "@/components/kit";
 import TopBar from "@/components/shell/TopBar";
 import Avatar from "@/components/ui/Avatar";
+
+// Instagram-style presence label.
+function lastSeenLabel(at?: string | null) {
+  if (!at) return "";
+  const m = (Date.now() - new Date(at).getTime()) / 60000;
+  if (m < 5) return "Active now";
+  if (m < 60) return `Active ${Math.floor(m)}m ago`;
+  if (m < 1440) return `Active ${Math.floor(m / 60)}h ago`;
+  if (m < 10080) return `Active ${Math.floor(m / 1440)}d ago`;
+  return "";
+}
+
+// Full-screen viewer for chat photos / videos / audio.
+function MediaViewer({ a, onClose }: { a: MessageAttachment; onClose: () => void }) {
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
+  }, [onClose]);
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,.95)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <button onClick={onClose} aria-label="Close" style={{ position: "absolute", top: "calc(14px + env(safe-area-inset-top, 0px))", right: 14, background: "rgba(255,255,255,.15)", border: "none", borderRadius: "50%", width: 38, height: 38, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><X size={20}/></button>
+      <div onClick={e => e.stopPropagation()} style={{ maxWidth: "100vw", maxHeight: "100vh", display: "flex" }}>
+        {a.kind === "video" ? <video src={a.url} controls autoPlay playsInline style={{ maxWidth: "100vw", maxHeight: "100vh" }}/>
+          : a.kind === "audio" ? <audio src={a.url} controls autoPlay style={{ width: "min(420px, 90vw)" }}/>
+          : <img src={a.url} alt="" style={{ maxWidth: "100vw", maxHeight: "100vh", objectFit: "contain" }}/>}
+      </div>
+    </div>
+  );
+}
 
 /* eslint-disable @next/next/no-img-element */
 
@@ -42,13 +72,18 @@ function MessagesScreenInner() {
   const [pendingAttachment, setPendingAttachment] = useState<MessageAttachment | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [viewer, setViewer] = useState<MessageAttachment | null>(null);
+  const [peerSeen, setPeerSeen] = useState<string | null>(null);
+  const [myNote, setMyNote] = useState<UserNote | null>(null);
+  const [composing, setComposing] = useState(false);
+  const [viewNote, setViewNote] = useState<{ note: UserNote; name: string; mine?: boolean } | null>(null);
 
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
     fetch(`/api/messages?userId=${user._id}`)
       .then(r => r.json())
-      .then(d => { if (!cancelled && Array.isArray(d.conversations)) setConvos(d.conversations); })
+      .then(d => { if (cancelled) return; if (Array.isArray(d.conversations)) setConvos(d.conversations); setMyNote(d.myNote ?? null); })
       .catch(() => {})
       .finally(() => { if (!cancelled) setConvosLoaded(true); });
     return () => { cancelled = true; };
@@ -78,7 +113,7 @@ function MessagesScreenInner() {
 
     fetch(`/api/messages?userId=${user._id}&with=${openWith._id}`)
       .then(r => r.json())
-      .then(d => { if (!cancelled && Array.isArray(d.messages)) setMessages(d.messages); })
+      .then(d => { if (cancelled) return; if (Array.isArray(d.messages)) setMessages(d.messages); setPeerSeen(d.peerLastSeenAt ?? null); })
       .catch(() => {});
 
     return () => { cancelled = true; };
@@ -123,7 +158,8 @@ function MessagesScreenInner() {
   const pickAttachment = async (file: File) => {
     const isVideo = file.type.startsWith("video/");
     const isImage = file.type.startsWith("image/");
-    if (!isImage && !isVideo) { showToast("Choose an image, GIF, or video", "error"); return; }
+    const isAudio = file.type.startsWith("audio/");
+    if (!isImage && !isVideo && !isAudio) { showToast("Choose an image, video, or audio file", "error"); return; }
 
     setUploading(true);
     try {
@@ -132,7 +168,7 @@ function MessagesScreenInner() {
       const r = await creatorFetch("/api/upload", { method: "POST", body: fd });
       const d = await r.json();
       if (!r.ok || !d.url) throw new Error(d.error || "Upload failed");
-      setPendingAttachment({ url: d.url, kind: isVideo ? "video" : "image" });
+      setPendingAttachment({ url: d.url, kind: isVideo ? "video" : isAudio ? "audio" : "image" });
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Upload failed", "error");
     } finally {
@@ -176,7 +212,10 @@ function MessagesScreenInner() {
               <ArrowLeft size={20}/>
             </button>
             <Avatar name={openWith.name} image={openWith.image} size={32}/>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{openWith.name}</span>
+            <span style={{ display: "flex", flexDirection: "column" }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{openWith.name}</span>
+              {!!lastSeenLabel(peerSeen) && <span style={{ fontSize: 11, color: "var(--text3)" }}>{lastSeenLabel(peerSeen)}</span>}
+            </span>
           </div>
 
           <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -214,11 +253,16 @@ function MessagesScreenInner() {
                     </div>
                   )}
                   {m.attachment && (
-                    m.attachment.kind === "video" ? (
-                      <video src={m.attachment.url} controls playsInline
-                        style={{ display: "block", maxWidth: "100%", borderRadius: 14, marginBottom: m.text ? 4 : 0 }}/>
+                    m.attachment.kind === "audio" ? (
+                      <audio src={m.attachment.url} controls style={{ display: "block", maxWidth: "100%", marginBottom: m.text ? 4 : 0 }}/>
+                    ) : m.attachment.kind === "video" ? (
+                      <div onClick={() => setViewer(m.attachment!)} style={{ position: "relative", cursor: "pointer", marginBottom: m.text ? 4 : 0 }}>
+                        <video src={m.attachment.url} muted playsInline preload="metadata"
+                          style={{ display: "block", maxWidth: "100%", maxHeight: 260, borderRadius: 14, pointerEvents: "none" }}/>
+                        <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 30, textShadow: "0 2px 8px rgba(0,0,0,.6)" }}>▶</span>
+                      </div>
                     ) : (
-                      <img src={m.attachment.url} alt="" style={{ display: "block", maxWidth: "100%", maxHeight: 260, borderRadius: 14, marginBottom: m.text ? 4 : 0 }}/>
+                      <img src={m.attachment.url} alt="" onClick={() => setViewer(m.attachment!)} style={{ display: "block", cursor: "zoom-in", maxWidth: "100%", maxHeight: 260, borderRadius: 14, marginBottom: m.text ? 4 : 0 }}/>
                     )
                   )}
                   {!!m.text && (
@@ -251,6 +295,7 @@ function MessagesScreenInner() {
             })}
             <div ref={endRef}/>
           </div>
+          {viewer && <MediaViewer a={viewer} onClose={() => setViewer(null)}/>}
 
           <div style={{
             borderTop: "1px solid var(--border)",
@@ -264,7 +309,9 @@ function MessagesScreenInner() {
                   </span>
                 ) : pendingAttachment && (
                   <div style={{ position: "relative", display: "inline-block" }}>
-                    {pendingAttachment.kind === "video" ? (
+                    {pendingAttachment.kind === "audio" ? (
+                      <span style={{ fontSize: 12, color: "var(--text2)", padding: "8px 12px", background: "var(--surface2)", borderRadius: 10, display: "block" }}>🎵 Audio ready</span>
+                    ) : pendingAttachment.kind === "video" ? (
                       <video src={pendingAttachment.url} style={{ height: 64, borderRadius: 10, display: "block" }}/>
                     ) : (
                       <img src={pendingAttachment.url} alt="" style={{ height: 64, borderRadius: 10, display: "block" }}/>
@@ -283,7 +330,7 @@ function MessagesScreenInner() {
             )}
 
             <div style={{ display: "flex", gap: 6, padding: 12, alignItems: "center" }}>
-              <input ref={fileRef} type="file" accept="image/*,video/*" hidden disabled={uploading}
+              <input ref={fileRef} type="file" accept="image/*,video/*,audio/*" hidden disabled={uploading}
                 onChange={e => { const f = e.target.files?.[0]; if (f) pickAttachment(f); }}/>
               <button onClick={() => fileRef.current?.click()} disabled={uploading} aria-label="Attach photo or video"
                 style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text2)", display: "flex", flex: "none", padding: 6 }}>
@@ -321,6 +368,17 @@ function MessagesScreenInner() {
           Messages
         </h1>
 
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, width: 90 }}>
+          <NoteBubble note={myNote} fallback="Note…" onClick={() => myNote ? setViewNote({ note: myNote, name: "Your", mine: true }) : setComposing(true)}/>
+          <button onClick={() => setComposing(true)} aria-label="Edit your note" style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+            <Avatar name={user.name} image={user.image} size={60}/>
+          </button>
+          <span style={{ fontSize: 11, color: "var(--text3)" }}>Your note</span>
+        </div>
+        {composing && <NoteComposer userId={user._id} initial={myNote} onClose={() => setComposing(false)} onSaved={setMyNote}/>}
+        {viewNote && <NoteViewer note={viewNote.note} name={viewNote.name}
+          onClose={() => setViewNote(null)} onEdit={viewNote.mine ? () => { setViewNote(null); setComposing(true); } : undefined}/>}
+
         {!convosLoaded ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {[0, 1, 2].map(i => <div key={i} className="skeleton" style={{ height: 54, borderRadius: 12 }}/>)}
@@ -338,7 +396,17 @@ function MessagesScreenInner() {
                     background: "none", border: "none",
                     borderBottom: i < convos.length - 1 ? "1px solid var(--border)" : "none",
                   }}>
-                  <Avatar name={other.name} image={other.image} size={54}/>
+                  <span style={{ position: "relative", flex: "none", paddingTop: other.note ? 22 : 0 }}>
+                    {other.note && (
+                      <span style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", zIndex: 1, lineHeight: 1 }}>
+                        <NoteBubble note={other.note} onClick={e => { e.stopPropagation(); setViewNote({ note: other.note!, name: other.name }); }}/>
+                      </span>
+                    )}
+                    <Avatar name={other.name} image={other.image} size={54}/>
+                    {lastSeenLabel(other.lastSeenAt) === "Active now" && (
+                      <span style={{ position: "absolute", right: 1, bottom: 1, width: 13, height: 13, borderRadius: "50%", background: "#22c55e", border: "2px solid var(--bg)" }}/>
+                    )}
+                  </span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span className="truncate" style={{ display: "block", fontSize: 14, fontWeight: c.unread > 0 ? 700 : 600, color: "var(--text)" }}>
                       {other.name}
@@ -348,7 +416,7 @@ function MessagesScreenInner() {
                       color: c.unread > 0 ? "var(--text)" : "var(--text3)",
                       fontWeight: c.unread > 0 ? 600 : 400,
                     }}>
-                      {c.lastMessage?.text ?? "Say hello"} · {timeAgo(c.updatedAt)}
+                      {c.lastMessage?.text ?? "Say hello"} · {c.unread > 0 || !lastSeenLabel(other.lastSeenAt) ? timeAgo(c.updatedAt) : lastSeenLabel(other.lastSeenAt)}
                     </span>
                   </span>
                   {c.unread > 0 && (

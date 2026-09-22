@@ -4,7 +4,7 @@ import { PlayCircle, Gift, Users, Flame, ArrowUpRight, ArrowDownRight } from "lu
 import { WalletState } from "@/types";
 import { useApp, useToast } from "@/store";
 import { timeAgo } from "@/lib/gamification";
-import { Screen, EmptyState } from "@/components/kit";
+import { Screen, EmptyState, Sheet } from "@/components/kit";
 import TopBar, { CoinGlyph } from "@/components/shell/TopBar";
 
 const REASON_LABEL: Record<string, string> = {
@@ -57,60 +57,33 @@ export default function CoinsScreen() {
   };
 
   // Loads Razorpay's checkout script once, on demand.
-  const loadRazorpay = () => new Promise<boolean>(resolve => {
-    if ((window as unknown as { Razorpay?: unknown }).Razorpay) { resolve(true); return; }
-    const script = document.createElement("script");
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.body.appendChild(script);
-  });
+  // Manual UPI: opens the UPI app with the amount pre-filled, straight
+  // to your own VPA — no gateway, no KYC. The claim records itself the
+  // moment they tap pay (no reference number needed from them) — you
+  // match it against your own bank/UPI app by amount and time, and
+  // coins credit only once you approve it at /admin/upi-claims.
+  const [pendingPack, setPendingPack] = useState<string | null>(null);
 
-  const buyPack = async (packKey: string) => {
+  const payViaUpi = async (packKey: string) => {
     if (!user) { showToast("Log in first", "info"); return; }
-    setBusy(`buy-${packKey}`);
-    try {
-      const ok = await loadRazorpay();
-      if (!ok) { showToast("Couldn't load payment gateway", "error"); return; }
-
-      const or = await fetch("/api/coins/razorpay/order", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ packKey }),
-      });
-      const order = await or.json();
-      if (!or.ok || order.error) { showToast(order.error || "Couldn't start payment", "error"); return; }
-
-      interface RazorpaySuccess { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string; }
-      type RazorpayCtor = new (opts: Record<string, unknown>) => { open: () => void };
-      const RazorpayCtor = (window as unknown as { Razorpay: RazorpayCtor }).Razorpay;
-      const rzp = new RazorpayCtor({
-        key: order.keyId, amount: order.amount, currency: order.currency,
-        name: "SWARA FM", description: "Coin top-up", order_id: order.orderId,
-        prefill: { name: user.name, email: user.email },
-        theme: { color: "#8B5CF6" },
-        handler: async (resp: RazorpaySuccess) => {
-          const vr = await fetch("/api/coins/razorpay/verify", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              userId: user._id, packKey,
-              razorpay_order_id: resp.razorpay_order_id,
-              razorpay_payment_id: resp.razorpay_payment_id,
-              razorpay_signature: resp.razorpay_signature,
-            }),
-          });
-          const vd = await vr.json();
-          if (!vr.ok || vd.error) { showToast(vd.error || "Payment couldn't be verified", "error"); return; }
-          showToast(`+${vd.coins} coins added!`, "success");
-          reload();
-        },
-        modal: { ondismiss: () => setBusy("") },
-      });
-      rzp.open();
-    } catch {
-      showToast("Network error", "error");
-    } finally {
-      setBusy("");
+    const pack = w?.packs.find(p => p.key === packKey);
+    if (!pack) return;
+    const vpa = process.env.NEXT_PUBLIC_UPI_VPA || "";
+    const payee = process.env.NEXT_PUBLIC_UPI_PAYEE_NAME || "SWARA FM";
+    if (!vpa || vpa === "yourvpa@bank") {
+      showToast("UPI ID isn't set up yet — add NEXT_PUBLIC_UPI_VPA", "error");
+      return;
     }
+    try {
+      await fetch("/api/coins/upi/claim", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user._id, packKey }),
+      });
+    } catch { /* still let them pay even if recording the claim fails */ }
+
+    setPendingPack(packKey);
+    const url = `upi://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(payee)}&am=${pack.price}&cu=INR&tn=${encodeURIComponent(`${pack.key} coins`)}`;
+    window.location.assign(url);
   };
 
   // The "ad" is a timed placeholder, not a real ad network. It exists so
@@ -122,10 +95,30 @@ export default function CoinsScreen() {
       showToast("No ads left today — come back tomorrow", "info");
       return;
     }
-    showToast("Playing a 30-second ad…", "info");
     setBusy("ad");
-    setTimeout(() => act("ad", {}, "thanks for watching"), 1200);
+    setAdLeft(8);
   };
+  const [adLeft, setAdLeft] = useState(0);
+  useEffect(() => {
+    if (adLeft <= 0) return;
+    const t = setTimeout(() => {
+      if (adLeft === 1) act("ad", {}, "thanks for watching");
+      setAdLeft(adLeft - 1);
+    }, 1000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adLeft]);
+  const IG_URL = "https://www.instagram.com/rare_unique_sence_girl_/";
+  const adOverlay = adLeft > 0 && (
+    <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "linear-gradient(160deg,#feda75,#fa7e1e 30%,#d62976 60%,#962fbf 85%,#4f5bd5)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, color: "#fff", textAlign: "center", padding: 24 }}>
+      <span style={{ position: "absolute", top: "calc(16px + env(safe-area-inset-top, 0px))", right: 16, background: "rgba(0,0,0,.35)", borderRadius: 999, padding: "6px 12px", fontSize: 13, fontWeight: 700 }}>Reward in {adLeft}s</span>
+      <div style={{ width: 96, height: 96, borderRadius: 28, border: "4px solid #fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 44 }}>📸</div>
+      <div style={{ fontSize: 22, fontWeight: 800 }}>@rare_unique_sence_girl_</div>
+      <div style={{ fontSize: 14, opacity: .9, maxWidth: 280 }}>Follow us on Instagram for updates, new stories & more ✨</div>
+      <a href={IG_URL} target="_blank" rel="noopener noreferrer" style={{ background: "#fff", color: "#d62976", fontWeight: 800, padding: "12px 28px", borderRadius: 999, textDecoration: "none" }}>Follow on Instagram</a>
+      <div style={{ position: "absolute", bottom: 0, left: 0, height: 4, background: "#fff", width: `${((8 - adLeft) / 8) * 100}%`, transition: "width 1s linear" }}/>
+    </div>
+  );
 
   const invite = async () => {
     const link = `${window.location.origin}/login?ref=${user?._id ?? ""}`;
@@ -150,6 +143,7 @@ export default function CoinsScreen() {
 
   return (
     <>
+      {adOverlay}
       <TopBar title="Coins"/>
       <Screen>
         {!loaded ? (
@@ -217,7 +211,7 @@ export default function CoinsScreen() {
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             {(w?.packs ?? []).map(p => (
-              <button key={p.key} onClick={() => buyPack(p.key)}
+              <button key={p.key} onClick={() => payViaUpi(p.key)}
                 disabled={!!busy} className="card"
                 style={{ padding: 14, textAlign: "left", cursor: "pointer" }}>
                 <span style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--coin)" }}>
@@ -285,6 +279,31 @@ export default function CoinsScreen() {
         </>
         )}
       </Screen>
+
+      <Sheet open={!!pendingPack} onClose={() => setPendingPack(null)} title="Payment initiated">
+        <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.6, marginTop: 0 }}>
+          If your UPI app didn&apos;t open automatically — that only works
+          on a phone with GPay/PhonePe installed, not on desktop — pay
+          manually using these details from your phone:
+        </p>
+        <div className="card" style={{ padding: 12, marginBottom: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
+            <span style={{ color: "var(--text3)" }}>UPI ID</span>
+            <strong style={{ color: "var(--text)" }}>{process.env.NEXT_PUBLIC_UPI_VPA}</strong>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+            <span style={{ color: "var(--text3)" }}>Amount</span>
+            <strong style={{ color: "var(--text)" }}>₹{w?.packs.find(p => p.key === pendingPack)?.price}</strong>
+          </div>
+        </div>
+        <p style={{ fontSize: 12.5, color: "var(--text3)", lineHeight: 1.6 }}>
+          Once you&apos;ve paid, just wait a few minutes — we&apos;ll verify it and
+          your coins credit automatically to your account.
+        </p>
+        <button onClick={() => setPendingPack(null)} className="btn btn-primary" style={{ width: "100%" }}>
+          Got it
+        </button>
+      </Sheet>
     </>
   );
 }

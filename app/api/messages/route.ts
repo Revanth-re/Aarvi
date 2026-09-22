@@ -17,11 +17,17 @@ export async function GET(req: NextRequest) {
     const me = p.get("userId");
     const withId = p.get("with");
     if (!me) return NextResponse.json({ error: "userId is required" }, { status: 400 });
+    UserModel.updateOne({ _id: me }, { $set: { lastSeenAt: new Date() } }).catch(() => {});
+    const noteOf = (u: any) => {
+      const n = u?.note;
+      if (!n?.at || Date.now() - new Date(n.at).getTime() >= 864e5 || !(n.text || n.musicUrl || n.ep?.episodeId)) return undefined;
+      return { text: n.text, bg: n.bg, musicUrl: n.musicUrl, musicName: n.musicName, musicStart: n.musicStart, musicEnd: n.musicEnd, ep: n.ep?.episodeId ? n.ep : undefined };
+    };
 
     // ── One thread ──
     if (withId) {
       const convo = await ConversationModel.findOne({ key: conversationKey(me, withId) }).lean<any>();
-      if (!convo) return NextResponse.json({ messages: [] });
+      if (!convo) { const pe = await UserModel.findById(withId).select("lastSeenAt").lean<any>().catch(() => null); return NextResponse.json({ messages: [], peerLastSeenAt: pe?.lastSeenAt ? iso(pe.lastSeenAt) : null }); }
 
       const rows = await MessageModel.find({ conversationId: idOf(convo._id) })
         .sort({ createdAt: 1 }).limit(200).lean<any[]>();
@@ -32,7 +38,9 @@ export async function GET(req: NextRequest) {
         { $addToSet: { readBy: me } }
       );
 
+      const peer = await UserModel.findById(withId).select("lastSeenAt").lean<any>().catch(() => null);
       return NextResponse.json({
+        peerLastSeenAt: peer?.lastSeenAt ? iso(peer.lastSeenAt) : null,
         messages: rows.map(m => ({
           _id: idOf(m._id), conversationId: idOf(m.conversationId),
           senderId: m.senderId, text: m.text,
@@ -47,10 +55,12 @@ export async function GET(req: NextRequest) {
     // ── List ──
     const convos = await ConversationModel.find({ participants: me })
       .sort({ lastMessageAt: -1 }).limit(50).lean<any[]>();
-    if (!convos.length) return NextResponse.json({ conversations: [] });
+    const meDoc = await UserModel.findById(me).select("note").lean<any>().catch(() => null);
+    const myNote = noteOf(meDoc) ?? null;
+    if (!convos.length) return NextResponse.json({ conversations: [], myNote });
 
     const otherIds = convos.map(c => (c.participants || []).find((x: string) => x !== me)).filter(Boolean);
-    const users = await UserModel.find({ _id: { $in: otherIds } }).select("name handle image").lean<any[]>();
+    const users = await UserModel.find({ _id: { $in: otherIds } }).select("name handle image lastSeenAt note").lean<any[]>();
     const byId = new Map(users.map(u => [idOf(u._id), u]));
 
     const conversations = await Promise.all(convos.map(async (c) => {
@@ -64,10 +74,10 @@ export async function GET(req: NextRequest) {
 
       return {
         _id: idOf(c._id),
-        participants: other ? [publicUser(other)] : [],
+        participants: other ? [{ ...publicUser(other), lastSeenAt: other.lastSeenAt ? iso(other.lastSeenAt) : undefined, note: noteOf(other) }] : [],
         lastMessage: last ? {
           _id: idOf(last._id), conversationId: idOf(c._id), senderId: last.senderId,
-          text: last.text || (last.attachment?.kind === "video" ? "Video" : last.attachment ? "Photo" : ""),
+          text: last.text || (last.attachment?.kind === "video" ? "Video" : last.attachment?.kind === "audio" ? "Audio" : last.attachment ? "Photo" : ""),
           createdAt: iso(last.createdAt), read: true,
         } : undefined,
         unread,
@@ -75,7 +85,7 @@ export async function GET(req: NextRequest) {
       };
     }));
 
-    return NextResponse.json({ conversations: conversations.filter(c => c.participants.length) });
+    return NextResponse.json({ myNote, conversations: conversations.filter(c => c.participants.length) });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
@@ -151,14 +161,14 @@ export async function POST(req: NextRequest) {
         },
       } : {}),
       ...(attachment?.url ? {
-        attachment: { url: String(attachment.url), kind: attachment.kind === "video" ? "video" : "image" },
+        attachment: { url: String(attachment.url), kind: attachment.kind === "video" ? "video" : attachment.kind === "audio" ? "audio" : "image" },
       } : {}),
     });
 
     // Sender's name is needed for both the in-app bell and the push
     // payload below, so it's fetched once regardless of the push toggle.
     const sender = await UserModel.findById(userId).select("name").lean<any>();
-    const preview = msg.text || (msg.attachment?.kind === "video" ? "Sent a video" : msg.attachment ? "Sent a photo" : "New message");
+    const preview = msg.text || (msg.attachment?.kind === "video" ? "Sent a video" : msg.attachment?.kind === "audio" ? "Sent audio" : msg.attachment ? "Sent a photo" : "New message");
 
     // In-app notification bell — always shows new DMs, regardless of the
     // recipient's push toggle (that toggle only controls whether it also
@@ -198,6 +208,32 @@ export async function POST(req: NextRequest) {
         ...(msg.attachment ? { attachment: msg.attachment } : {}),
       },
     }, { status: 201 });
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 });
+  }
+}
+
+// PATCH /api/messages — { userId, note } sets (or clears, if empty) your 24h Note.
+export async function PATCH(req: NextRequest) {
+  try {
+    await connectDB();
+    const { userId, note } = await req.json();
+    if (!userId) return NextResponse.json({ error: "userId is required" }, { status: 400 });
+    const n: any = note && typeof note === "object" ? note : { text: note };
+    const s = (v: any, max = 300) => (v ? String(v).slice(0, max) : undefined);
+    const clean: any = {
+      text: s(String(n.text ?? "").trim(), 60), bg: s(n.bg, 40),
+      musicUrl: s(n.musicUrl), musicName: s(n.musicName, 80),
+      musicStart: Math.max(0, Number(n.musicStart) || 0), musicEnd: Number(n.musicEnd) > 0 ? Number(n.musicEnd) : undefined,
+      ep: n.ep?.episodeId ? {
+        seriesId: s(n.ep.seriesId, 60), seriesTitle: s(n.ep.seriesTitle, 120), episodeId: s(n.ep.episodeId, 60),
+        title: s(n.ep.title, 120), cover: s(n.ep.cover), audioUrl: s(n.ep.audioUrl), start: Math.max(0, Number(n.ep.start) || 0),
+        end: Number(n.ep.end) > 0 ? Number(n.ep.end) : undefined,
+      } : undefined,
+    };
+    const has = clean.text || clean.musicUrl || clean.ep;
+    await UserModel.updateOne({ _id: userId }, has ? { $set: { note: { ...clean, at: new Date() } } } : { $unset: { note: 1 } });
+    return NextResponse.json({ note: has ? clean : null });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
